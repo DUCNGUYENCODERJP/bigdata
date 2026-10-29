@@ -1,11 +1,11 @@
-# CHUA HOAT DONG: dien 3 GitHub username con lai vao cac cho @<...> duoi day.
-# GitHub se bao "Invalid code owner" cho toi khi dien xong.
-# Sau do bat: Settings -> Branches -> Add rule cho `main` -> tick "Require review from Code Owners".
+# Chủ sở hữu thư mục: PR đụng vào đường dẫn nào sẽ tự request review của người tương ứng.
+# Chỉ có hiệu lực force khi tick "Require review from Code Owners"
+# ở Settings -> Branches -> rule của `main`.
+#
+# Còn thiếu username của Người 3 và Người 4: hai dòng cuối đang để comment.
+# Uncomment và điền là xong; đừng để placeholder @<...> vì GitHub báo "Invalid code owner".
 
-/1-warehouse/              @<username-nguoi-1>
-/3-analytics/              @<username-nguoi-3>
-/4-bi/                     @<username-nguoi-4>
-
+/1-warehouse/              @trinhvu56
 /2-processing/             @DUCNGUYENCODERJP
 
 # Thu muc chung: ai muon sua phai co review cua chu repo
@@ -14,3 +14,7 @@
 /.github/                  @DUCNGUYENCODERJP
 /docs/                     @DUCNGUYENCODERJP
 /.gitignore                @DUCNGUYENCODERJP
+
+# TODO khi co username: bo dau # va thay @<...>
+#/3-analytics/              @<username-nguoi-3>
+#/4-bi/                     @<username-nguoi-4>
