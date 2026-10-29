@@ -57,23 +57,48 @@ Chi phí đã đo trên máy nguồn: **~19,7 s cho mỗi 1 triệu dòng raw** 
 
 Exit code 0 nghĩa là 188/188 partition, không lệch schema, `raw - removed` khớp số dòng trên đĩa.
 
-## 5. Bàn giao dữ liệu 34 GB (kênh Google Drive / ổ cứng)
+## 5. Bàn giao dữ liệu 34 GB (kênh máy chủ / HDFS của nhóm)
 
-Copy **nguyên cây thư mục** `data/clean/trips` (2894 file, giữ nguyên tên `year=2024/month=1`). Không nén: Parquet đã Snappy, nên zip chỉ mất thời gian mà không giảm được bao nhiêu; nếu Drive làm hỏng tên thư mục có dấu `=`, tạo `.zip` ở chế độ *store* (không nén) thay vì nén lại.
+**Không `hdfs dfs -put` được từ máy Windows nguồn.** Thư mục `HADOOP_HOME` ở đây chỉ có `winutils.exe` + `hadoop.dll` phục vụ PySpark local, không có `hadoop.cmd`/`hdfs.cmd`/`etc/hadoop/core-site.xml`; muốn dùng trực tiếp phải tải trọn bản phân phối Hadoop. Vì vậy chiều chuyển luôn là: staging → chép lên node của cluster → `put` từ chính node đó.
 
-Người nhận đối chiếu bằng manifest SHA-256 trong `reports/data_transfer_manifest.csv`:
+**Bước 1 — staging, bỏ sidecar `.crc`** (chạy trên máy nguồn, cần ~34 GB ổ trống):
 
 ```powershell
-$root = "<duong-dan-data/clean/trips>"
-$rows = Import-Csv "<duong-dan>\reports\data_transfer_manifest.csv"
-foreach ($r in $rows) {
-  $p = Join-Path $root ($r.relpath -replace '/', '\')
-  if (-not (Test-Path $p)) { "THIEU: $($r.relpath)"; continue }
-  if ((Get-Item $p).Length -ne [long]$r.size_bytes) { "LECH SIZE: $($r.relpath)" }
-}
+robocopy "D:\BIGDATA\2-processing\data\clean\trips" "D:\staging\trips" /E /XF *.crc
 ```
 
-Muốn xác minh chặt hơn thì `Get-FileHash -Algorithm SHA256` từng file và so cột `sha256`; chỉ cần soi 1447 file `.parquet` vì `.crc` là sidecar của Hadoop, Spark tự bỏ qua.
+Được 1447 file Parquet, 35.788.700.805 B = **33,33 GiB** thay vì 2894 file / 33,59 GiB. `.crc` là checksum sidecar kiểu Hadoop-local, HDFS tự tính checksum của nó nên mang lên chỉ tổ thêm 1447 object rác.
+
+**Bước 2 — chép lên node**: `scp -r`, `rsync -a --info=progress2`, hoặc ổ cứng nếu cluster không cùng mạng. Trên LAN 1 Gbps, 33 GB mất cỡ 5–8 phút; qua WiFi thì chậm hơn nhiều.
+
+**Bước 3 — đưa lên HDFS từ node** (chú ý hệ số nhân bản):
+
+```bash
+hdfs dfs -mkdir -p /user/<user>/warehouse
+hdfs dfs -put -D dfs.replication=2 /path/staging/trips /user/<user>/warehouse/trips
+```
+
+Replication mặc định là **3**, tức 33 GB thành ~100 GB chiếm chỗ trên cluster; đặt 1–2 cho bài tập nhóm.
+
+**Bước 4 — xác minh** số học khớp bảng dưới đây rồi mới báo cho nhóm:
+
+```bash
+hdfs dfs -count  /user/<user>/warehouse/trips
+# in ra "<số thư mục> <số file> <tổng byte> <đường dẫn>"
+# sau bước 1 (đã bỏ .crc) phải ra đúng:   204  1447  35788700805
+# 204 = 16 thư mục year= + 188 thư mục month=
+```
+
+Nếu cluster giữ nguyên cả `.crc` (không chạy bước 1) thì con số phải là `204 2894 36068314549`. Đối chiếu từng file thì dùng `reports/data_transfer_manifest.csv` — nó có `relpath`, `size_bytes`, `sha256` của từng file.
+
+| Năm | GiB | Năm | GiB | Năm | GiB | Năm | GiB |
+|---|---|---|---|---|---|---|---|
+| 2011 | 3,7 | 2015 | 3,4 | 2019 | 2,1 | 2023 | 0,96 |
+| 2012 | 3,6 | 2016 | 3,1 | 2020 | 0,60 | 2024 | 1,01 |
+| 2013 | 3,5 | 2017 | 2,7 | 2021 | 0,77 | 2025 | 1,20 |
+| 2014 | 3,6 | 2018 | 2,5 | 2022 | 0,99 | 2026 | 0,73 |
+
+**Con đường rẻ hơn nếu cluster có internet và ≥ 55 GB trống:** đừng chuyển byte nào — clone repo này lên node, sửa 6 đường dẫn trong `config.yaml`, bỏ `hadoop_home` (Linux không cần winutils), rồi `python src/batch_runner.py --from 2011-01 --to 2026-08 --force`. Pipeline chỉ phụ thuộc Python 3.9+, JDK 17 và PySpark 4.0.1; đã kiểm chứng toàn bộ 188 tháng trên Windows, chi phí ~7,2 giờ.
 
 ## 6. Bốn điều phải nói thẳng với nhóm
 
