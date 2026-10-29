@@ -13,6 +13,7 @@ Phạm vi: pipeline tải – kiểm tra – làm sạch – ghi warehouse cho *
 | Postcheck (`invalid`, `missing`) | **0 / 0** cho cả 188 tháng | `reports/run_log.csv`, `src/output_validation.py` |
 | Kiểm thử | **34/34** xanh | `tests/` |
 | Kích thước output | 36.068.314.549 B = 2894 file (1447 Parquet 35.788.700.805 B + 1447 `.crc` 279.613.744 B) | `reports/data_transfer_manifest.csv` |
+| Nơi 34 GB đang nằm | máy nguồn `D:\BIGDATA\2-processing\data\clean\trips`, **chưa** ở hệ thống chung của nhóm | mục 5 và 7 |
 
 Dữ liệu raw không nằm trong repo: **54 GB** (20 GB raw + 34 GB clean), trong raw có **101 file > 100 MB** — GitHub chặn cứng ở 100 MB/file và khuyến nghị repo < 1 GB. Đường lấy dữ liệu sạch: xem mục 4.
 
@@ -107,6 +108,32 @@ Nếu cluster giữ nguyên cả `.crc` (không chạy bước 1) thì con số 
 3. **Người 3 (Analytics & ML) — quan trọng:** từ 2025-05 đến 2025-11 có cụm cuốc huỷ/refund với `fare_amount < 0` chiếm **6,3–9,4%** dòng, nên ngưỡng loại năm 2025 được nâng lên **12%** (`cleaning.max_drop_rate_by_year`) trong khi các năm khác vẫn 8%. Nếu pool 2025 với năm khác mà không biết điều này, số liệu lệch. Tháng 2025-12 trở lại 1,12% và 2026-08 là 0,42% — đây là thay đổi cách kê khai của nguồn, không phải lỗi tải.
 4. **Người 3 / Người 4:** `passenger_count` chỉ dùng thống kê mô tả, **tuyệt đối không đưa vào feature** dự báo. Ba cờ chất lượng `is_short_trip`, `is_distance_missing`, `is_unknown_zone` nên được dùng làm bộ lọc khi dựng feature, không phải dữ liệu thiếu cần điền.
 
-## 7. Liên hệ
+## 7. Phần còn treo — cần Người 1 xác nhận rồi mới ghi
+
+Toàn bộ 188 partition **đang nằm trên máy nguồn** ở `data/clean/trips` và chưa ở đâu trong hệ thống chung của nhóm. Chốt đích ghi là việc của Người 1, có ba phương án:
+
+| Phương án | Ai làm | Chi phí | Ghi chú |
+|---|---|---|---|
+| A. Đăng ký cây Parquet có sẵn thành bảng Hive | Người 1 | gần 0, không ghi lại byte nào | Khuyến nghị. Chép 33 GB lên HDFS theo mục 5 rồi chạy SQL ở dưới. |
+| B. Tôi đổi `sink.type: hive` rồi chạy lại batch | Người 2 | ~7,2 giờ ghi lại 188 tháng | Nhánh này **chưa từng chạy thật và không có unit test** (xem `src/writer.py`, `src/pipeline.py:59`); chỉ làm sau khi Người 1 xác nhận metastore. |
+| C. Mỗi người tự build từ repo | từng người | ~7,2 giờ + 55 GB ổ mỗi máy | Không phải chuyển dữ liệu, nhưng máy nào cũng phải có JDK 17 và tải lại từ TLC. |
+
+Hai lệnh mà Người 1 cần, sau khi cây `trips` đã ở HDFS:
+
+```sql
+CREATE TABLE IF NOT EXISTS nyc_taxi.trips
+USING parquet
+LOCATION 'hdfs://<namenode>:8020/user/<user>/warehouse/trips';
+
+MSCK REPAIR TABLE nyc_taxi.trips;   -- nạp 188 partition year=/month= từ tên thư mục
+```
+
+Ba câu hỏi phải có trả lời trước khi ghi:
+
+1. **Đích là gì**: bảng Hive `nyc_taxi.trips` (tên đang khai trong `config.yaml`) hay chỉ một đường dẫn HDFS mà mọi người `spark.read.parquet()`?
+2. **Metastore loại nào**: Thrift shared (`spark.sql.hive.metastoreURIs` / `hive-site.xml`) hay embedded Derby? Derby mặc định của Spark chỉ một tiến trình dùng được và **không chia sẻ cho cả nhóm**, nên nếu Người 1 chọn hướng B thì phải có metastore thật.
+3. **Ai chạy lệnh ghi và chạy ở máy nào**: nếu là B thì cần một máy Linux có client HDFS, vì máy nguồn hiện không có (`D:\hadoop` chỉ có `winutils.exe` + `hadoop.dll` cho PySpark local).
+
+## 8. Liên hệ
 
 Chủ sở hữu slice: Người 2 (data processing). Mọi câu hỏi về ngưỡng làm sạch, cột đầu ra hay phạm vi tháng đều do Người 2 quyết; thay đổi số dòng đã loại phải chạy lại `warehouse_report.py` để cập nhật `docs/schema.md`.
