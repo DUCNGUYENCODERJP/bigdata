@@ -1,0 +1,118 @@
+paths:
+  raw_dir: D:/BIGDATA/2-processing/data/raw
+  clean_dir: D:/BIGDATA/2-processing/data/clean
+  reports_dir: D:/BIGDATA/2-processing/reports
+  spark_local_dir: D:/tmp/spark
+  schema_doc: D:/BIGDATA/2-processing/docs/schema_auto.md
+
+hadoop_home: D:/hadoop
+
+runtime:
+  java_home: C:/Program Files/Eclipse Adoptium/jdk-17.0.15.6-hotspot
+  spark_master: local[6]
+  driver_memory: 10g
+  shuffle_partitions: 32
+  min_free_disk_gb: 8
+  timezone: America/New_York
+
+sink:
+  type: local
+  local_format: parquet
+  local_mode: overwrite
+  hive_table: nyc_taxi.trips
+  hive_format: parquet
+  hive_mode: overwrite
+
+source:
+  trip_url_template: https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_{month}.parquet
+  zones_url: https://d37ci6vzurychx.cloudfront.net/misc/taxi_zone_lookup.csv
+  zones_filename: taxi_zone_lookup.csv
+  retries: 10
+  connect_timeout_seconds: 30
+  read_timeout_seconds: 180
+  chunk_size_bytes: 1048576
+
+months:
+  - 2024-01
+
+quality_check:
+  duration_diagnostic_hours: [1, 2, 3, 4]
+  distance_diagnostic_miles: [50, 100, 200]
+
+cleaning:
+  max_drop_rate: 0.08
+  # Ngưỡng riêng theo năm, nạp chồng max_drop_rate. 2025-05..11 loại 8.0–11.0% dòng,
+  # trong đó 6.3–9.4% là cuốc huỷ/refund có fare_amount < 0 (đã đo, không phải lỗi nguồn).
+  max_drop_rate_by_year:
+    "2025": 0.12
+  trip_distance_min_miles: 0
+  trip_distance_max_miles: 100
+  # Ngưỡng loại: chỉ loại khi thời lượng <= 0 hoặc > 180 phút.
+  trip_duration_min_minutes: 0
+  trip_duration_max_minutes: 180
+  # Chuyến dưới mốc này vẫn giữ, chỉ gắn cờ is_short_trip (không loại).
+  short_trip_max_minutes: 1
+  average_speed_max_mph: 100
+  zero_passenger_count: set_null
+  required_non_null_columns:
+    - tpep_pickup_datetime
+    - tpep_dropoff_datetime
+    - PULocationID
+    - DOLocationID
+    - fare_amount
+  # Mỗi dòng chỉ được tính ở rule đầu tiên khớp; duplicate được đếm riêng trước.
+  # Rule average_speed chỉ xét chuyến có thời lượng >= trip_duration_min_minutes
+  # và >= short_trip_max_minutes, vì tốc độ suy ra từ chuyến dưới 1 phút không ổn định.
+  rule_order:
+    - duplicate
+    - trip_distance
+    - trip_duration
+    - fare_amount
+    - total_amount
+    - average_speed
+    - pickup_month
+    - required_fields
+
+transform:
+  # Cột đầu ra do transform sinh ra.
+  output_columns:
+    - pickup_datetime
+    - pickup_date
+    - pickup_hour_ts
+    - dropoff_datetime
+    - year
+    - month
+    - day
+    - hour
+    - day_of_week
+    - pickup_location_id
+    - is_unknown_zone
+    - pickup_borough
+    - pickup_zone
+    - dropoff_location_id
+    - dropoff_borough
+    - dropoff_zone
+    - trip_distance
+    - is_distance_missing
+    - trip_duration_min
+    - is_short_trip
+    # passenger_count chỉ dùng mô tả, tuyệt đối không đưa vào features mô hình.
+    - passenger_count
+    - fare_amount
+    - total_amount
+    - tip_amount
+    - tolls_amount
+
+validation:
+  # Partition dùng làm chuẩn schema khi resume; phải là tháng đã ghi bằng code hiện tại.
+  schema_baseline_month: 2024-01
+
+batch:
+  # Mô hình đo ngày 2026-10-28: 2024-01 (2,96 triệu dòng raw, 67 s) và
+  # 2011-02 (14,20 triệu dòng raw, 224 s), cùng một phiên Spark cho mỗi tháng.
+  fixed_seconds_per_month: 25.6
+  seconds_per_million_raw_rows: 13.97
+  # bytes/dòng output trung bình hai tháng đo được (26,1 và 21,7).
+  output_bytes_per_row: 22.3
+  # Tốc độ tải đo thật từ CloudFront của TLC: 167,83 MiB trong 97 s.
+  download_bytes_per_second: 1810000

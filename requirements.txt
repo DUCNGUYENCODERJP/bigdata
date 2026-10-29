@@ -1,0 +1,4 @@
+pyspark==4.0.1
+PyYAML>=6.0,<7.0
+requests>=2.32,<3.0
+pytest>=8.0,<9.0
