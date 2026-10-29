@@ -44,7 +44,7 @@ Không lên GitHub (và không nên lên): `.venv/`, `data/`, `.tmp/`, transcrip
 ## 4. Tái tạo warehouse từ số không
 
 ```powershell
-Set-Location <thu-muc-repo>
+Set-Location <repo>/2-processing
 .\scripts\run_batch.ps1 -From 2011-01 -To 2026-08 -Force -KeepAwake
 ```
 

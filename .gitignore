@@ -1,20 +1,22 @@
-# Môi trường và dữ liệu: không lên GitHub.
-# data/ = 20 GB raw + 34 GB clean, trong raw có 101 file >100 MB (GitHub chặn cứng ở 100 MB/file).
-# Dữ liệu tái tạo được từ url trong reports/source_manifest.csv, nên repo chỉ cần code.
-.venv/
-data/
-.tmp/
-.pytest_cache/
+# Môi trường và dữ liệu — không bao giờ commit
 __pycache__/
 *.py[cod]
+.venv/
+venv/
+.tmp/
+.pytest_cache/
+.idea/
+.vscode/
 
-# Thư mục reports/ mặc định không theo repo, chỉ giữ các tệp làm bằng chứng nghiệm thu:
-# warehouse_summary.md (bảng 188 tháng), run_log.csv (kết quả từng tháng),
-# source_manifest.csv (URL + schema từng tháng để tải lại),
-# data_transfer_manifest.csv (SHA-256 từng file để soi bản copy 34 GB).
-# Transcript ~900 KB và các báo cáo mốc cũ vẫn nằm trên máy, không xoá.
-reports/*
-!reports/warehouse_summary.md
-!reports/run_log.csv
-!reports/source_manifest.csv
-!reports/data_transfer_manifest.csv
+# Dữ liệu lớn: GitHub chặn cứng 100 MB/file. Ai cần dữ liệu thì xem
+# 2-processing/docs/handover.md (tái tạo bằng pipeline ~7,2 giờ).
+data/
+*.parquet
+*.orc
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Môi trường cục bộ của từng người (đường dẫn máy-cụ-thể)
+*.env
+*.local.yaml
