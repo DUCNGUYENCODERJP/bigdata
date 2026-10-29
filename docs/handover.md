@@ -9,7 +9,7 @@ Phạm vi: pipeline tải – kiểm tra – làm sạch – ghi warehouse cho *
 | Partition trên đĩa | **188/188**, `year=/month=` | `reports/warehouse_summary.md` |
 | Lệch schema giữa các partition | **0** | `docs/schema.md` (sinh từ schema thật) |
 | Dòng trên đĩa | **1.506.791.871** | `reports/warehouse_summary.md` |
-| Dòng bị loại | 9.974.909 = **0,657%** trên 1.516.766.780 dòng raw | `reports/run_log.csv` |
+| Dòng bị loại | 9.974.909 = **0,658%** trên 1.516.766.780 dòng raw | `reports/run_log.csv` |
 | Postcheck (`invalid`, `missing`) | **0 / 0** cho cả 188 tháng | `reports/run_log.csv`, `src/output_validation.py` |
 | Kiểm thử | **34/34** xanh | `tests/` |
 | Kích thước output | 36.068.314.549 B = 2894 file (1447 Parquet 35.788.700.805 B + 1447 `.crc` 279.613.744 B) | `reports/data_transfer_manifest.csv` |
