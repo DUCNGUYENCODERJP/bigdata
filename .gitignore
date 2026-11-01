@@ -1,0 +1,22 @@
+# Môi trường và dữ liệu — không bao giờ commit
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.tmp/
+.pytest_cache/
+.idea/
+.vscode/
+
+# Dữ liệu lớn: GitHub chặn cứng 100 MB/file. Ai cần dữ liệu thì xem
+# 2-processing/docs/handover.md (tái tạo bằng pipeline ~7,2 giờ).
+data/
+*.parquet
+*.orc
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Môi trường cục bộ của từng người (đường dẫn máy-cụ-thể)
+*.env
+*.local.yaml

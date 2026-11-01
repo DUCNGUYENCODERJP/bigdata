@@ -1,0 +1,16 @@
+# CHUA HOAT DONG: dien 3 GitHub username con lai vao cac cho @<...> duoi day.
+# GitHub se bao "Invalid code owner" cho toi khi dien xong.
+# Sau do bat: Settings -> Branches -> Add rule cho `main` -> tick "Require review from Code Owners".
+
+/1-warehouse/              @<username-nguoi-1>
+/3-analytics/              @<username-nguoi-3>
+/4-bi/                     @<username-nguoi-4>
+
+/2-processing/             @DUCNGUYENCODERJP
+
+# Thu muc chung: ai muon sua phai co review cua chu repo
+/README.md                 @DUCNGUYENCODERJP
+/CONTRIBUTING.md           @DUCNGUYENCODERJP
+/.github/                  @DUCNGUYENCODERJP
+/docs/                     @DUCNGUYENCODERJP
+/.gitignore                @DUCNGUYENCODERJP
