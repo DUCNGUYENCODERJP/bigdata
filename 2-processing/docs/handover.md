@@ -60,37 +60,33 @@ Exit code 0 nghĩa là 188/188 partition, không lệch schema, `raw - removed` 
 
 ## 5. Bàn giao dữ liệu 34 GB (kênh máy chủ / HDFS của nhóm)
 
-**Không `hdfs dfs -put` được từ máy Windows nguồn.** Thư mục `HADOOP_HOME` ở đây chỉ có `winutils.exe` + `hadoop.dll` phục vụ PySpark local, không có `hadoop.cmd`/`hdfs.cmd`/`etc/hadoop/core-site.xml`; muốn dùng trực tiếp phải tải trọn bản phân phối Hadoop. Vì vậy chiều chuyển luôn là: staging → chép lên node của cluster → `put` từ chính node đó.
+**Máy nguồn không có `hdfs` CLI.** `HADOOP_HOME` chỉ gồm `winutils.exe` + `hadoop.dll` phục vụ PySpark local; `winutils` không liên quan gì tới khối dữ liệu HDFS. Thiếu CLI **không** có nghĩa không đẩy được vào cluster: hai client nói chuyện trực tiếp đều đã có sẵn trên máy này, không tải thêm gì.
 
-**Bước 1 — staging, bỏ sidecar `.crc`** (chạy trên máy nguồn, cần ~34 GB ổ trống):
+| Cách | Client có sẵn | Cổng phải tới được từ máy nguồn | Giữ nguyên tên file / số byte? |
+|---|---|---|---|
+| 1. Spark HDFS native | PySpark 4.0.1 bundle `hadoop-client-api/runtime` (chứa `DistributedFileSystem`) | `8020` NameNode RPC + `9866` DataNode block transfer | **Không** — Spark ghi lại, đặt tên file khác, số byte thay đổi |
+| 2. WebHDFS REST | `requests` (dependency của dự án, `requirements.txt`), `op=CREATE` rồi theo redirect 307 | `9870` NameNode UI + `9864` DataNode HTTP | **Có** — ghi từng byte đúng tên file gốc |
 
-```powershell
-robocopy "D:\BIGDATA\2-processing\data\clean\trips" "D:\staging\trips" /E /XF *.crc
-```
+Chọn **cách 2**, vì chỉ nó giữ cho `reports/data_transfer_manifest.csv` (sha256 từng file) và các con số ở Bước 3 còn nghĩa. WebHDFS PUT không có bản staging, nên HDFS chỉ cần đúng 33,33 GiB.
 
-Được 1447 file Parquet, 35.788.700.805 B = **33,33 GiB** thay vì 2894 file / 33,59 GiB. `.crc` là checksum sidecar kiểu Hadoop-local, HDFS tự tính checksum của nó nên mang lên chỉ tổ thêm 1447 object rác.
+**Bẫy Docker — phải chốt trước khi chuyển byte nào.** Khi client hỏi block nằm ở DataNode nào, NameNode trả về **địa chỉ DataNode tự quảng bá**; cluster trong Docker thường trả tên container mà máy ngoài không resolve được → lỗi `Bad connection to BlockPool` hoặc timeout, dù `8020` telnet thông. Redirect 307 của WebHDFS cũng chứa đúng địa chỉ đó (`dfs.datanode.hostname`), nên **cả hai cách trên đều dính**, không có đường nào miễn nhiễm. Fix phía cluster: đặt `dfs.datanode.hostname = <IP LAN của laptop>` và publish cổng `9864` (hoặc `9866` nếu đi Spark). Kiểm chứng bằng **một file 24 MB**, không phải bằng 33 GiB.
 
-**Bước 2 — chép lên node**: `scp -r`, `rsync -a --info=progress2`, hoặc ổ cứng nếu cluster không cùng mạng. Trên LAN 1 Gbps, 33 GB mất cỡ 5–8 phút; qua WiFi thì chậm hơn nhiều.
+**Dung lượng**: Docker Desktop trên Windows đặt đĩa WSL2 (`.vhdx`) ở ổ do người dùng cấu hình — nếu nó đang ở `C:` thì mỗi GiB ghi vào HDFS là một GiB ghi lên `C:`, và vhdx **không tự co lại**. Phải xác định vhdx nằm ở ổ nào và còn trống bao nhiêu **GiB** (Windows hiển thị GiB, không phải GB) trước khi bắt đầu.
 
-**Bước 3 — đưa lên HDFS từ node** (chú ý hệ số nhân bản):
+**Bước 1 — loại sidecar `.crc`**: thư mục trên đĩa có **2894** file; 1447 file `.crc` là checksum kiểu Hadoop-local, HDFS tự tính checksum riêng nên mang lên chỉ thêm object rác. Script chuyển bỏ theo hậu tố, không chép staging. Con số đúng để đối chiếu: 1447 file Parquet, 35.788.700.805 B = **33,33 GiB** (toàn bộ kể cả `.crc` là 36.068.314.549 B = 33,59 GiB).
 
-```bash
-hdfs dfs -mkdir -p /user/<user>/warehouse
-hdfs dfs -put -D dfs.replication=2 /path/staging/trips /user/<user>/warehouse/trips
-```
+**Bước 2 — hệ số nhân bản**: cluster có **một** DataNode nên đặt `dfs.replication=1`. Mặc định là **3** → block sẽ vĩnh viễn ở trạng thái under-replicated và cảnh báo ồn; với 1 DataNode thì 2 hay 3 cũng không tạo thêm bản sao nào.
 
-Replication mặc định là **3**, tức 33 GB thành ~100 GB chiếm chỗ trên cluster; đặt 1–2 cho bài tập nhóm.
-
-**Bước 4 — xác minh** số học khớp bảng dưới đây rồi mới báo cho nhóm:
+**Bước 3 — xác minh** số học khớp rồi mới báo cho nhóm:
 
 ```bash
-hdfs dfs -count  /user/<user>/warehouse/trips
-# in ra "<số thư mục> <số file> <tổng byte> <đường dẫn>"
-# sau bước 1 (đã bỏ .crc) phải ra đúng:   204  1447  35788700805
+hdfs dfs -count  /data/nyc_taxi/clean/trips
+# in ra "<số thư mục con> <số file> <tổng byte> <đường dẫn>"
+# đã bỏ .crc thì phải ra đúng:   204  1447  35788700805
 # 204 = 16 thư mục year= + 188 thư mục month=
 ```
 
-Nếu cluster giữ nguyên cả `.crc` (không chạy bước 1) thì con số phải là `204 2894 36068314549`. Đối chiếu từng file thì dùng `reports/data_transfer_manifest.csv` — nó có `relpath`, `size_bytes`, `sha256` của từng file.
+Nếu cluster giữ nguyên cả `.crc` thì con số phải là `204 2894 36068314549`. Đối chiếu từng file thì dùng `reports/data_transfer_manifest.csv` — nó có `relpath`, `size_bytes`, `sha256` của từng file.
 
 | Năm | GiB | Năm | GiB | Năm | GiB | Năm | GiB |
 |---|---|---|---|---|---|---|---|
@@ -108,31 +104,35 @@ Nếu cluster giữ nguyên cả `.crc` (không chạy bước 1) thì con số 
 3. **Người 3 (Analytics & ML) — quan trọng:** từ 2025-05 đến 2025-11 có cụm cuốc huỷ/refund với `fare_amount < 0` chiếm **6,3–9,4%** dòng, nên ngưỡng loại năm 2025 được nâng lên **12%** (`cleaning.max_drop_rate_by_year`) trong khi các năm khác vẫn 8%. Nếu pool 2025 với năm khác mà không biết điều này, số liệu lệch. Tháng 2025-12 trở lại 1,12% và 2026-08 là 0,42% — đây là thay đổi cách kê khai của nguồn, không phải lỗi tải.
 4. **Người 3 / Người 4:** `passenger_count` chỉ dùng thống kê mô tả, **tuyệt đối không đưa vào feature** dự báo. Ba cờ chất lượng `is_short_trip`, `is_distance_missing`, `is_unknown_zone` nên được dùng làm bộ lọc khi dựng feature, không phải dữ liệu thiếu cần điền.
 
-## 7. Phần còn treo — cần Người 1 xác nhận rồi mới ghi
+## 7. Đích ghi — đã chốt về thiết kế, còn chờ kiểm chứng đường truyền
 
-Toàn bộ 188 partition **đang nằm trên máy nguồn** ở `data/clean/trips` và chưa ở đâu trong hệ thống chung của nhóm. Chốt đích ghi là việc của Người 1, có ba phương án:
+Toàn bộ 188 partition **vẫn đang nằm trên máy nguồn** ở `data/clean/trips`, chưa có byte nào ở hệ thống chung. Thông số đã thống nhất với Người 1:
 
-| Phương án | Ai làm | Chi phí | Ghi chú |
-|---|---|---|---|
-| A. Đăng ký cây Parquet có sẵn thành bảng Hive | Người 1 | gần 0, không ghi lại byte nào | Khuyến nghị. Chép 33 GB lên HDFS theo mục 5 rồi chạy SQL ở dưới. |
-| B. Tôi đổi `sink.type: hive` rồi chạy lại batch | Người 2 | ~7,2 giờ ghi lại 188 tháng | Nhánh này **chưa từng chạy thật và không có unit test** (xem `src/writer.py`, `src/pipeline.py:59`); chỉ làm sau khi Người 1 xác nhận metastore. |
-| C. Mỗi người tự build từ repo | từng người | ~7,2 giờ + 55 GB ổ mỗi máy | Không phải chuyển dữ liệu, nhưng máy nào cũng phải có JDK 17 và tải lại từ TLC. |
+| Hạng mục | Giá trị chốt |
+|---|---|
+| Cluster | Hadoop 3.4.1 chạy Docker trên laptop Windows của Người 1 (1 NameNode + 1 DataNode) |
+| Đường dẫn Clean | `/data/nyc_taxi/clean/trips` (theo quy ước Raw/Clean của nhóm, không dùng `/user/<user>/...`) |
+| Bảng Hive | `nyc_taxi.trips`, **external table**, location `hdfs://<IP-LAN>:8020/data/nyc_taxi/clean/trips` |
+| Metastore | PostgreSQL chứa metadata, Hive Metastore phục vụ Thrift `9083` |
+| `dfs.replication` | `1` |
+| Cách chuyển | WebHDFS PUT từng file từ máy nguồn, bỏ `.crc` (mục 5) |
+| Kerberos / HiveServer2 | **chưa kết luận**; phương án đọc `spark.read.parquet("hdfs://...")` trực tiếp thì không cần HiveServer2 |
 
-Hai lệnh mà Người 1 cần, sau khi cây `trips` đã ở HDFS:
+Chưa kiểm chứng: IP LAN, firewall, **địa chỉ DataNode tự quảng bá**, cổng WebHDFS, dung lượng còn trống (mục 5 có lý do từng cái). Chưa chuyển gì trước khi test một file 24 MB thông.
+
+Hai lệnh mà Người 1 cần, sau khi cây `trips` đã ở HDFS và `-count` khớp:
 
 ```sql
 CREATE TABLE IF NOT EXISTS nyc_taxi.trips
 USING parquet
-LOCATION 'hdfs://<namenode>:8020/user/<user>/warehouse/trips';
+LOCATION 'hdfs://<IP-LAN>:8020/data/nyc_taxi/clean/trips';
 
 MSCK REPAIR TABLE nyc_taxi.trips;   -- nạp 188 partition year=/month= từ tên thư mục
 ```
 
-Ba câu hỏi phải có trả lời trước khi ghi:
+Ngoại hình lệnh này dễ gây hiểu hai chỗ: `USING parquet` + `LOCATION` trong Spark SQL **đã là external table** (DROP bảng không xoá dữ liệu), không cần từ khoá `EXTERNAL` của Hive; và external table chỉ **đăng ký metadata trỏ vào Parquet có sẵn** — nó không tự sinh hay tự sửa dữ liệu, không chạy `MSCK REPAIR` thì query thấy bảng rỗng.
 
-1. **Đích là gì**: bảng Hive `nyc_taxi.trips` (tên đang khai trong `config.yaml`) hay chỉ một đường dẫn HDFS mà mọi người `spark.read.parquet()`?
-2. **Metastore loại nào**: Thrift shared (`spark.sql.hive.metastoreURIs` / `hive-site.xml`) hay embedded Derby? Derby mặc định của Spark chỉ một tiến trình dùng được và **không chia sẻ cho cả nhóm**, nên nếu Người 1 chọn hướng B thì phải có metastore thật.
-3. **Ai chạy lệnh ghi và chạy ở máy nào**: nếu là B thì cần một máy Linux có client HDFS, vì máy nguồn hiện không có (`D:\hadoop` chỉ có `winutils.exe` + `hadoop.dll` cho PySpark local).
+Nhánh `sink.type: hive` trong `src/writer.py` dùng `saveAsTable`, tức tạo **managed table** trong Hive warehouse chứ không phải external ở `/data/...`; nó **chưa từng chạy thật và không có unit test**. Với đích đã chốt ở trên thì không cần chạy lại pipeline: ghi file byte-nguyên rồi đăng ký bảng rẻ hơn và kiểm chứng được.
 
 ## 8. Liên hệ
 
