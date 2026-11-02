@@ -8,6 +8,10 @@ data/
 __pycache__/
 *.py[cod]
 
+# Hai thư mục Hive local do src/register_warehouse.py sinh ra (Derby + warehouse).
+metastore_db/
+spark-warehouse/
+
 # Thư mục reports/ mặc định không theo repo, chỉ giữ các tệp làm bằng chứng nghiệm thu:
 # warehouse_summary.md (bảng 188 tháng), run_log.csv (kết quả từng tháng),
 # source_manifest.csv (URL + schema từng tháng để tải lại),

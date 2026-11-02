@@ -82,6 +82,17 @@ Khi gián đoạn, chạy lại cùng lệnh nhưng bỏ `-Force`: runner sẽ p
 
 Script mở một phiên Spark, đọc schema và số dòng của từng partition (đếm từ footer Parquet nên rẻ), so all partition với chuẩn `validation.schema_baseline_month`, đối chiếu `raw - removed = dòng trên đĩa` lấy số liệu từ `run_log.csv`, rồi ghi `reports/warehouse_summary.md` (kèm bảng 188 tháng, danh sách `failed`/`flagged`, partition thiếu hoặc lệch schema) và sinh lại `docs/schema.md` từ schema thật. Exit code 1 khi có partition lệch schema hoặc arithmetic không khớp; tháng chưa có `run_log` để trống chứ không đoán 0.
 
+## Kho Hive local
+
+```powershell
+Set-Location D:\BIGDATA\2-processing
+.\.venv\Scripts\python.exe src\register_warehouse.py
+```
+
+`src/register_warehouse.py` dựng metastore Derby nhúng rồi đăng ký cây Parquet `data/clean/trips` thành bảng `nyc_taxi.trips` (`sink.hive_table`) bằng `LOCATION` + `MSCK REPAIR TABLE`, không ghi lại byte nào. Script in ra số partition (kỳ vọng 188), số cột và tổng dòng, và trả exit code 1 nếu tổng dòng lệch `1.506.791.871` đã nghiệm thu; `--skip-count` bỏ phần đếm khi chỉ cần đăng ký lại. Toàn bộ chạy mất khoảng 35 giây vì `count(*)` lấy từ footer Parquet.
+
+Hai hạn chế của cách này: metastore Derby **chỉ một tiến trình** truy cập nên không phục vụ cả nhóm qua mạng, và bảng đang trỏ vào dữ liệu trên máy nguồn — muốn dùng làm kho chung vẫn phải đăng ký trên HDFS của nhóm. Vì là external table, `DROP TABLE` không xoá dữ liệu; ngược lại `INSERT OVERWRITE` sẽ ghi đè vào `data/clean/trips`.
+
 ## Kiểm thử
 
 ```powershell
