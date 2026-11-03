@@ -182,6 +182,44 @@ spark-submit --conf spark.hadoop.hive.metastore.uris=thrift://<IP_may>:9083 `
 nên `year()/hour()` suy từ cột có thể lệch vài giờ so với partition `year=/month=`; và view
 chỉ đổi tên + khai lại kiểu, không tính lại bất kỳ giá trị nào.
 
+### Lệnh trên chạy ở máy nào? (đọc trước khi mất một buổi chiều)
+
+Lệnh `spark-submit` ở mục này **được kiểm chứng trên chính máy đang chạy cluster** (máy Người 2,
+`D:\hadoop` có sẵn `winutils.exe` + `hadoop.dll`, JDK 17 ở
+`C:\Program Files\Eclipse Adoptium\jdk-17.0.15.6-hotspot`, spark-submit đến từ Python 3.11 hệ
+thống — bản có `numpy` nên `pyspark.ml` chạy được). Ba thứ đó **không đi theo repo**.
+
+Nếu Người 3/4 chạy từ PC riêng thì trên máy đó phải tự có đủ bốn thứ, thiếu một là chết:
+
+1. **JDK 17** (không phải Java mới nhất trong PATH — máy này có sẵn Java 25 và Spark 4.0.1
+   không dùng được với nó), đặt `JAVA_HOME` trỏ vào bản 17.
+2. **`HADOOP_HOME` kiểu Windows**: một thư mục có `bin\winutils.exe` và `bin\hadoop.dll`
+   (Hadoop 3.4.x). Không có thì Spark báo `ExitCodeException ... winutils.exe`.
+3. **pyspark 4.0.1 + numpy** trong cùng một interpreter (numpy là bắt buộc vì `pyspark.ml`;
+   `.venv` của mảnh 2 KHÔNG có numpy nên không dùng được cho phần ML).
+4. Cùng **mạng LAN/Wi-Fi** với máy chủ, vì kho không có địa chỉ công cộng.
+
+**Những gì ĐÃ đo được về network (kiểm tra lại 2026-11-03):** 8020 và 9083 đang listen trên
+`::` (mọi interface) và `0.0.0.0` do Docker công bố; cổng DataNode 9864/9866/9867 cũng đã mở;
+Wi-Fi của máy này đang ở profile **Public** nhưng rule *Docker Desktop Backend* cho phép
+Inbound-Allow trên đúng profile đó, `RemoteAddress = Any`; alias
+`192-168-<a>-<b>.sslip.io` mà DataNode quảng bá resolve ra đúng IP hiện hành.
+
+**Những gì CHƯA nghiệm thu: chưa có một máy vật lý thứ hai kết nối vào kho.** Toàn bộ PASS
+hôm nay là client chạy trên chính máy chủ (đi qua IP LAN) hoặc trong mạng Docker. Nên nếu
+Người 3 báo không nối được, nghi theo thứ tự này trước khi đổ cho cluster:
+
+1. Máy đó và máy chủ **có cùng một Wi-Fi/LAN** không (khác subnet là không nối được, kể cả
+   khi cổng mở).
+2. Mạng đó **resolve được `*.sslip.io`** không — đây là DNS công cộng; mạng công ty/trường
+   chặn DNS ngoài sẽ khiến NameNode vẫn nối được nhưng DataNode chết (triệu chứng: ghi file
+   báo `could only be written to 0 of the 1 minReplication nodes`).
+3. IP máy chủ **đã đổi** sau lần kiểm tra này không → chạy `tools\Set-Host.ps1` rồi xin IP mới.
+4. Docker Desktop trên máy chủ **tự tắt engine** đã xảy ra thật (containers `Exited (255)`) →
+   mở lại app, `docker compose up -d`, dữ liệu volume không mất.
+
+Báo nguyên văn thông báo lỗi cho Người 2 thay vì mô tả, vì ba ca này trông rất giống nhau.
+
 ### Đã chạy thay Người 3 trên kho này (kết quả thật, không phải suy)
 
 `src/verify_person3_pipeline.py` import nguyên `analysis.py`, `data_loader.py`,
@@ -200,8 +238,10 @@ chỉ đổi tên + khai lại kiểu, không tính lại bất kỳ giá trị 
 
 Con số RMSE/MAPE không phải lỗi của kho: nó là hệ quả của việc chỉ huấn luyện trên
 **một tháng** với `maxIter=10` (MAPE 923% cho thấy test period có thang đo khác hẳn
-train). Người 3 nên chạy cả năm rồi mới kết luận về model; việc của mảnh 1 là chứng minh
-**đường dữ liệu thông** — và nó thông, kể cả bước ghi output lên HDFS.
+train). **`--max-iter` mặc định của `main.py` là 50, không phải 10** — con số 48,00 ở
+dòng trên chỉ mô tả cấu hình smoke, đừng dùng nó để kết luận "GBT tệ". Người 3 nên chạy
+cả năm rồi mới đánh giá model; việc của mảnh 1 là chứng minh **đường dữ liệu thông** —
+và nó thông, kể cả bước ghi output lên HDFS.
 
 ## 5. Số đo thực tế trên máy này (i7, Wi-Fi, Docker Desktop WSL2)
 
@@ -298,6 +338,11 @@ trong catalog Derby. Khi cần dựng catalog sach, `-RebuildCatalog` **đổi t
 - **Cluster chạy trên máy cá nhân**, không phải máy chủ chung: khi Người 1 nhận lại phần này,
   copy nguyên thư mục `1-warehouse/` sang máy khác rồi chạy mục 3 + 6. Kho của nhóm chỉ tồn tại
   lúc máy này bật và Docker đang chạy — buổi demo cần người mang máy.
+- **Kết nối từ máy khác CHƯA được nghiệm thu bằng một máy thật.** Đã kiểm tra cấu hình tới mức:
+  cổng listen mọi interface, firewall cho phép Inbound trên đúng profile Wi-Fi hiện tại, alias
+  sslip.io resolve đúng (mục 4 có bảng số đo). Nhưng mọi client đã chạy hôm nay đều ở trên
+  chính máy chủ hoặc trong mạng Docker, nên "Người 3 ngồi PC riêng mà nối được" mới là giả
+  thuyết có cơ sở, chưa phải số đo thật. Ca này chỉ đóng được khi có người thứ hai chạy thật.
 - **Rác do quá trình dựng kho để lại, chưa xoá theo đúng quy tắc "không xoá file"**:
   trên HDFS có `/bench` (3,7 GB file ghi khi đo thông lượng), `/probe` (28 B) và
   `/tmp/nyc_taxi_analytics_smoke` (output thử của `verify_person3_pipeline.py`, không phải
