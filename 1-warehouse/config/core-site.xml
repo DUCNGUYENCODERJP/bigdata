@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Loi trong anh apache/hadoop:3.4.1, file goc o /opt/hadoop/etc/hadoop/core-site.xml -->
+<configuration>
+  <!-- Ten nay do Docker DNS phien giac trong network cua compose. -->
+  <property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://namenode:8020</value>
+  </property>
+
+  <!-- WebHDFS truc tiep (khong qua proxy) dung user.name tu client; de mac dinh la root
+       de lenh `hdfs dfs` chay bang user root trong container khong bi loi permission. -->
+  <property>
+    <name>hadoop.http.staticuser.user</name>
+    <value>root</value>
+  </property>
+
+  <property>
+    <name>dfs.webhdfs.enabled</name>
+    <value>true</value>
+  </property>
+</configuration>

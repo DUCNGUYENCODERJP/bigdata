@@ -1,0 +1,113 @@
+name: nyc-warehouse
+
+# Cluster Hadoop 3.4.1 + Hive Standalone Metastore cho do an Big Data (slice 1).
+# Dung: docker compose up -d  (chay trong 1-warehouse/)
+# Toan bo du lieu nam trong ./data/ o ao D:, khong ghi len C:.
+
+services:
+  namenode:
+    image: apache/hadoop:3.4.1
+    container_name: nyc-namenode
+    hostname: namenode
+    # Anh chay mac dinh bang user hadoop (uid 1000), nhung script hdfs tu choi
+    # namenode/datanode neu nguoi dung khong khop HDFS_*_USER => ep ve root.
+    user: root
+    ports:
+      - "8020:8020"    # fs.defaultFS / Spark native HDFS client
+      - "9870:9870"    # NameNode UI + WebHDFS endpoint
+    environment:
+      HADOOP_HOME: /opt/hadoop
+      # starter.sh cua anh nay tu format neu thu muc nay con trong
+      # (khong can goi lenh rieng), chi chay khi that su thieu.
+      ENSURE_NAMENODE_DIR: /opt/hadoop/dfs/name/current
+      HDFS_NAMENODE_USER: root
+      HDFS_DATANODE_USER: root
+      HDFS_SECONDARYNAMENODE_USER: root
+    volumes:
+      - ./config/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./config/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml
+      - ./data/namenode:/opt/hadoop/dfs/name
+    # starter.sh ket thuc bang "$@" nen lenh duoi day chay truc tiep, tan so = foreground.
+    command: ["hdfs", "namenode"]
+    healthcheck:
+      test: ["CMD-SHELL", "hdfs dfsadmin -report > /dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 20s
+      retries: 20
+      start_period: 30s
+
+  datanode:
+    image: apache/hadoop:3.4.1
+    container_name: nyc-datanode
+    hostname: datanode
+    user: root
+    depends_on:
+      namenode:
+        condition: service_healthy
+    ports:
+      - "9864:9864"    # dfs.datanode.http.address -> WebHDFS data transfer (307 redirect)
+      - "9866:9866"    # dfs.datanode.address     -> Spark native block transfer
+      - "9867:9867"    # dfs.datanode.ipc.address -> mac dinh cua image, de phong khi
+                       # client native can chuyen dia chi ipc cua DataNode
+    environment:
+      HADOOP_HOME: /opt/hadoop
+      HDFS_NAMENODE_USER: root
+      HDFS_DATANODE_USER: root
+    volumes:
+      - ./config/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./config/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml
+      - ./data/datanode:/opt/hadoop/dfs/data
+    command: ["hdfs", "datanode"]
+
+  metastore:
+    # 3.1.3 = ban Hive cuoi cung con giu Thrift method `get_table(db, tbl)` ma
+    # Spark 4.0.1 goi. standalone-metastore-4.1.0 tro len da xoa no (do truc tiep
+    # tren jar 4.2.1: chi con get_table_req/get_table_meta => "Invalid method name").
+    image: apache/hive:3.1.3
+    container_name: nyc-metastore
+    hostname: metastore
+    depends_on:
+      datanode:
+        condition: service_started
+    ports:
+      - "9083:9083"    # Hive Metastore Thrift -> Spark enableHiveSupport()
+      - "10000:10000"  # HiveServer2/beeline - chi dung khi bat SERVICE_NAME=hiveserver2
+    environment:
+      # /entrypoint.sh cua anh nay: moi file trong HIVE_CUSTOM_CONF_DIR duoc
+      # `ln -sfn` vao $HIVE_CONF_DIR, va HADOOP_CONF_DIR cung tro ve do. Vi vay
+      # ./config phai chua du core-site.xml + hdfs-site.xml + hive-site.xml.
+      # Toan bo tri so Derby/warehouse dat trong config/hive-site.xml (duong dan
+      # tuyet doi) chu khong truyen qua env DEFAULT_FS nhu anh 4.x.
+      HIVE_CUSTOM_CONF_DIR: /opt/hive/custom-conf
+      SERVICE_NAME: metastore
+      DB_DRIVER: derby
+      METASTORE_PORT: "9083"
+      # IS_RESUME=true bo qua schematool (Derby da co schema tren ./data/metastore).
+      # Lan dau tien (hoac khi muon dung schema moi):
+      #   IS_RESUME=false docker compose up -d metastore
+      IS_RESUME: ${IS_RESUME:-true}
+    volumes:
+      - ./data/metastore:/opt/hive/data
+      - ./config:/opt/hive/custom-conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/9083' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  # Container phu tro: chay lenh hdfs (dfsadmin -report, dfs -count, mkdir) ma khong
+  # can cau Hadoop tren may Windows. Giu song bang sleep, vao qua docker exec.
+  client:
+    image: apache/hadoop:3.4.1
+    container_name: nyc-client
+    user: root
+    depends_on:
+      namenode:
+        condition: service_healthy
+    environment:
+      HADOOP_HOME: /opt/hadoop
+    volumes:
+      - ./config/core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./config/hdfs-site.xml:/opt/hadoop/etc/hadoop/hdfs-site.xml
+    command: ["sleep", "infinity"]
