@@ -134,11 +134,15 @@ của container và báo `could only be written to 0 of the 1 minReplication nod
 | `default.raw_nyc_taxi` | external, **19 cột dữ liệu + year/month** (union của 21 tên cột TLC), 188 partition | `/data/nyc_taxi/raw/trips` (19,55 GiB) | cuốc huỷ `fare_amount < 0` mà clean đã loại: **5.026.251 dòng** |
 | `default.clean_nyc_taxi_tlc` | **view** (không chiếm chỗ) | như bảng sạch | code `3-analytics` đòi tên cột gốc TLC |
 
-Hai điều phải biết khi dùng `raw_nyc_taxi` (đều đã đo, không phải suy đoán):
+Ba điều phải biết khi dùng `raw_nyc_taxi` (đều đã đo, không phải suy đoán):
 
 - **Thiếu `RatecodeID` và `passenger_count`.** Hai cột này là INT64 ở 133 tháng rồi
-  DOUBLE ở 55 tháng; không kiểu nào đọc được cả hai phía (`double` đọc file INT64 sẽ
-  chết giữa chừng — `tools/probe_type_promotion.py`), nên bảng bỏ chúng. Code của
+  DOUBLE ở 55 tháng. `tools/probe_type_promotion.py` đã đo đủ bảy cặp khai-báo/kieu-file
+  và không kiểu nào đọc được cả hai phía: `double ← INT64` chết giữa chừng
+  (`FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH`, SQLSTATE KD001),
+  `bigint ← DOUBLE` chết ngay khi mở cột (`SchemaColumnConvertNotSupportedException`),
+  còn `int ← INT64` cũng chết — nên `bigint` chỉ cứu được INT32+INT64, `double` chỉ cứu
+  được INT32+DOUBLE. Bảng bỏ hai cột đó. Code của
   Người 3 không đụng tới: `config.py` và `model.py` ghi rõ `passenger_count` bị loại
   khỏi feature một cách có chủ đích.
 - **Thời gian trong raw bẩn hơn clean.** Scan toàn bảng cho `tpep_pickup_datetime`
