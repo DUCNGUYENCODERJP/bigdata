@@ -137,7 +137,7 @@ của container và báo `could only be written to 0 of the 1 minReplication nod
 Ba điều phải biết khi dùng `raw_nyc_taxi` (đều đã đo, không phải suy đoán):
 
 - **Thiếu `RatecodeID` và `passenger_count`.** Hai cột này là INT64 ở 133 tháng rồi
-  DOUBLE ở 55 tháng. `tools/probe_type_promotion.py` đã đo đủ bảy cặp khai-báo/kieu-file
+  DOUBLE ở 55 tháng. `tools/probe_type_promotion.py` đã đo đủ 15 ca (mỗi cặp khai-báo ↔ kiểu-file thật)
   và không kiểu nào đọc được cả hai phía: `double ← INT64` chết giữa chừng
   (`FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH`, SQLSTATE KD001),
   `bigint ← DOUBLE` chết ngay khi mở cột (`SchemaColumnConvertNotSupportedException`),

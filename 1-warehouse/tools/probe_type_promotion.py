@@ -53,7 +53,7 @@ Hai dieu rut ra cho ai query `raw_nyc_taxi`:
   (`docs/schema.md`: 23 cot vat ly khong co cot nay) — vo hieu voi `clean_nyc_taxi`
   va `clean_nyc_taxi_tlc`, chi anh huong khi lam viec truc tiep tren raw.
 
-Ba ket luan quyet dinh schema cua bang, do du ca bay cap khai bao/kieu-file:
+Ba ket luan quyet dinh schema cua bang, do du 15 ca khai bao/kieu-file that:
 1. `bigint` phuc vu INT32 + INT64; `double` phuc vu INT32 + DOUBLE; **khong kieu nao
    doc duoc ca INT64 lan DOUBLE** (`double<-INT64` va `bigint<-DOUBLE` deu chet), nen
    `RatecodeID` va `passenger_count` bi loai khoi `raw_nyc_taxi` — day la ly do duy
