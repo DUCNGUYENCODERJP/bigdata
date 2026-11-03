@@ -2,11 +2,13 @@
 # Chỉ có hiệu lực force khi tick "Require review from Code Owners"
 # ở Settings -> Branches -> rule của `main`.
 #
-# Còn thiếu username của Người 3 và Người 4: hai dòng cuối đang để comment.
+# Còn thiếu username của Người 4: dòng cuoi trong file đang để comment.
 # Uncomment và điền là xong; đừng để placeholder @<...> vì GitHub báo "Invalid code owner".
 
 /1-warehouse/              @trinhvu56
 /2-processing/             @DUCNGUYENCODERJP
+# Nguoi 3: PR #1 duoc push tu branch `BuiNhat1610-patch-1` -> do la username cua ho.
+/3-analytics/              @BuiNhat1610
 
 # Thu muc chung: ai muon sua phai co review cua chu repo
 /README.md                 @DUCNGUYENCODERJP
@@ -16,5 +18,4 @@
 /.gitignore                @DUCNGUYENCODERJP
 
 # TODO khi co username: bo dau # va thay @<...>
-#/3-analytics/              @<username-nguoi-3>
 #/4-bi/                     @<username-nguoi-4>
