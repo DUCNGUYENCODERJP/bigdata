@@ -46,3 +46,36 @@ Lưu ý trung thực: nhánh `sink.type: hive` có trong code nhưng **chưa ch�
 `.\scripts\run_batch.ps1 -From 2011-01 -To 2026-08 -Force` — ~7,2 giờ, cần JDK 17 + 55 GB ổ trống, sửa 6 đường dẫn trong `config.yaml`. Gián đoạn thì chạy lại bỏ `-Force`.
 
 **Đầu mối:** Người 2. Đổi cột/ngưỡng nào cũng phải chạy lại 188 tháng, nên hỏi trước khi tự đổi.
+
+---
+
+## Cập nhật 2026-11-03 — kho chung đã chạy, câu hỏi gửi Người 1 ở trên không còn treo
+
+Mảnh 1 (Hadoop + Hive trên Docker) đã dựng xong trên máy này và nghiệm thu bằng truy vấn thật. Chi tiết + lệnh chạy: [`1-warehouse/README.md`](../../1-warehouse/README.md); những chỗ đoán sai trước đây đã ghi rõ trong [`handover.md` mục 9](handover.md).
+
+**Có sẵn trên HDFS:**
+
+| Bảng | Nội dung | Nghiệm thu |
+|---|---|---|
+| `default.clean_nyc_taxi` | 33,33 GiB Parquet sạch, phân vùng `year=/month=` | 188/188 partition, `count(*) = 1.506.791.871` |
+| `default.raw_nyc_taxi` | File gốc TLC chưa lọc, 19,55 GiB, 19 cột | 188/188 partition, `count(*) = 1.516.766.780` (scan thật qua đủ 188 file), **5.026.251 cuốc huỷ `fare_amount < 0`** |
+| `default.clean_nyc_taxi_tlc` | **View** cùng dữ liệu, đổi tên cột về kiểu file gốc + khai lại kiểu thời gian | dành riêng cho code `3-analytics`; pruning vẫn cắt đúng 1 partition |
+
+**Người 3** — code của bạn đang đòi cột `PULocationID` / `tpep_pickup_datetime` / `tpep_dropoff_datetime`, bảng sạch dùng tên chuẩn hoá, nên chạy qua view (không cần sửa code, `main.py` đã có cờ này). Lưu ý `analysis.py` của bạn tính thời lượng bằng `CAST(tpep_dropoff_datetime AS BIGINT)`: đọc **trực tiếp** `clean_nyc_taxi` sẽ lỗi `DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION` vì cột đó là `TIMESTAMP_NTZ`; view đã cast sẵn sang `TIMESTAMP` nên qua view thì chạy được. Lệnh chạy:
+
+```powershell
+spark-submit --conf spark.hadoop.hive.metastore.uris=thrift://<IP-máy-kho>:9083 `
+  --conf spark.hadoop.fs.defaultFS=hdfs://<IP-máy-kho>:8020 `
+  --conf spark.hadoop.dfs.client.use.datanode.hostname=true `
+  --conf spark.sql.catalogImplementation=hive `
+  main.py --clean-table clean_nyc_taxi_tlc --raw-table raw_nyc_taxi
+```
+
+Cờ `dfs.client.use.datanode.hostname=true` **bắt buộc** khi Spark chạy ngoài mạng Docker — thiếu nó sẽ lỗi `could only be written to 0 of the 1 minReplication nodes`. `<IP-máy-kho>` là IP Wi-Fi của máy chạy cluster, xem `docker compose ps` ở máy đó; máy đổi mạng thì chạy `1-warehouse/tools/Set-Host.ps1` và xin lại IP.
+
+**Đã chạy thử hộ trên partition 2024-01 bằng đúng code của bạn** (`analysis.py`, `feature_engineering.py`, `model.py`, `writer.py`…, không sửa dòng nào): PASS cả 6 nhóm hàm trong 521 s, ghi được Parquet/CSV lên HDFS. Một lưu ý để bạn khỏi mất một ngày: với **một tháng** + `maxIter=10` thì GBT **kém hơn baseline** (RMSE 48,0 so với 29,5; MAPE 923% so với 89%) — hãy chạy cả năm rồi mới kết luận về model.
+
+**Người 4** — đọc cùng hai bảng qua đúng 4 dòng cấu hình trên, hoặc lấy Parquet Người 3 ghi ra ở `hdfs:///user/hive/warehouse/nyc_taxi_analytics/` (analytics_summary, fare_travel_by_hour, demand_heatmap, cancelled_trips, predictions, metrics).
+
+**Còn treo:** metastore là Derby nhúng, **một người ghi một lúc**; `raw_nyc_taxi` thiếu `RatecodeID` và `passenger_count` (hai cột đổi kiểu INT64↔DOUBLE giữa các năm, không kiểu nào đọc được cả hai — đã đo), số dòng mới đối chiếu **tổng**, chưa so *từng tháng*; hai bảng này chạy trên máy cá nhân, không phải máy chủ chung của trường. `.venv` của mảnh 2 không có `numpy` nên `pyspark.ml` không chạy được bằng env đó — máy này đã có Python 3.11 (pyspark 4.0.1 + numpy) dùng được.
+

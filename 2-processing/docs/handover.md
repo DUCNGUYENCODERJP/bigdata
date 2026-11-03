@@ -137,3 +137,50 @@ Nhánh `sink.type: hive` trong `src/writer.py` dùng `saveAsTable`, tức tạo 
 ## 8. Liên hệ
 
 Chủ sở hữu slice: Người 2 (data processing). Mọi câu hỏi về ngưỡng làm sạch, cột đầu ra hay phạm vi tháng đều do Người 2 quyết; thay đổi số dòng đã loại phải chạy lại `warehouse_report.py` để cập nhật `docs/schema.md`.
+
+## 9. Cập nhật 2026-11-03 — kho chung đã chạy thật, mục 5 và 7 có chỗ sai
+
+Mảnh 1 đã được dựng và nghiệm thu trên chính máy nguồn (Người 2 làm thay Người 1 theo thỏa thuận nhóm). Cluster: Hadoop 3.4.1 + Hive Metastore trong Docker Compose, toàn bộ tài liệu ở [../../1-warehouse/README.md](../../1-warehouse/README.md). Bốn chỗ mục 5 và 7 đoán sai, giữ nguyên chữ ở trên để ai đọc sau biết cái nào không còn đúng:
+
+| Mục cũ | Nói thế | Thực tế đã chạy |
+|---|---|---|
+| 5 | Chọn WebHDFS PUT vì chỉ nó giữ nguyên byte | **Sai lựa chọn.** Client HDFS native giữ nguyên byte y như WebHDFS và nhanh gấp 5,5 lần: `HdfsCopy` 4 luồng đo **66,3 MiB/s** (33,1 GiB / 499 s), WebHDFS PUT chỉ **12,0 MiB/s**. 1447 file đã lên HDFS **khớp từng byte** với đĩa. |
+| 5 | Bẫy tất yếu: `dfs.datanode.hostname` phải là IP LAN | **Sai một phần.** Đặt IP thô thì client Windows coi DataNode là "local node" và loại khỏi pipeline ngay (`could only be written to 0 of the 1 minReplication nodes`). Phải dùng **alias** trỏ về đúng IP: `192-168-<a>-<b>.sslip.io` (DNS wildcard, resolve được cả trong container lẫn ngoài Windows, không phải sửa `hosts`). |
+| 7 | Metastore: PostgreSQL | **Derby nhúng trong container** — đủ cho một người ghi, nhưng chỉ **một JVM** mở được nó (`hive -e`/`beeline` song song sẽ fail). Mọi metadata phải đi qua Thrift 9083 tức qua Spark. Nếu cả nhóm query đồng thời thì vẫn phải đổi sang PostgreSQL như mục 7 ghi. |
+| 7 | Bảng tên `nyc_taxi.trips` | **`default.clean_nyc_taxi`** (database `default` để `spark.table("clean_nyc_taxi")` chạy ngay không cần `USE`). External table, location `hdfs://<IP>:8020/data/nyc_taxi/clean/trips`, 25 cột, **188/188 partition**, `count(*) = 1.506.791.871` đúng mốc bàn giao. |
+
+Số đã kiểm chứng bằng truy vấn thật từ Spark chạy trên Windows (không phải suy từ log chép file):
+
+- `1-warehouse/src/verify_access.py` → **PASS**: 188 partition, toàn bảng 1.506.791.871, pruning đúng (`year=2026/month=8` chỉ đọc 1 thư mục), 2011-01 = 13.441.123, 2020-03 = 2.988.041, 2026-08 = 3.277.598.
+- Raw của TLC cũng đã lên HDFS: **`default.raw_nyc_taxi`** — 189 file / **20.986.383.705 B** (19,55 GiB), khớp từng byte với `2-processing/data/raw`; **188/188 partition**; bảng có **19 cột dữ liệu + year/month** sinh từ `source_manifest.csv` (không mở 188 file). Một scan thật qua đủ 188 file (587 s) cho **1.516.766.780 dòng** = đúng tổng footer, và **5.026.251 dòng `fare_amount < 0`** — đúng thứ Người 3 cần mà clean đã loại.
+- **Hai cột `RatecodeID` và `passenger_count` không có trong bảng raw.** Lý do đo được chứ không phải suy: hai cột này là INT64 ở 133 tháng rồi DOUBLE ở 55 tháng, mà Spark từ chối đọc file INT64 bằng khai báo `double` (`FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH`, SQLSTATE KD001 — `1-warehouse/tools/probe_type_promotion.py`). `3-analytics` không dùng cả hai (`config.py`/`model.py` loại `passenger_count` có chủ đích).
+- View `clean_nyc_taxi_tlc` không chỉ đổi tên mà còn **cast lại hai cột thời gian về `TIMESTAMP`**, vì bảng sạch mang kiểu `TIMESTAMP_NTZ` do Parquet lưu micros; `analysis.py` của Người 3 làm `CAST(tpep_dropoff_datetime AS BIGINT)` và Spark 4 từ chối cast từ `TIMESTAMP_NTZ` (`DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION`). Sau khi view cast: công thức của họ cho 17,1653 phút ở partition 2026-08, **khớp tuyệt đối** (lệch 0,000000) với cột `trip_duration_min` đã lưu.
+
+### Điều Người 3 phải biết (mới, phát hiện khi đọc `3-analytics/`)
+
+`data_loader.py` của Người 3 kiểm tra các cột **tên gốc TLC** (`PULocationID`, `tpep_pickup_datetime`, `tpep_dropoff_datetime`, `fare_amount`), còn `clean_nyc_taxi` dùng tên đã chuẩn hoá → đọc trực tiếp sẽ gặp `ValueError: Table 'clean_nyc_taxi' is missing required columns`. Không sửa code của Người 3; mảnh 1 dựng **view** `default.clean_nyc_taxi_tlc` (lớp tên + khai lại kiểu thời gian, không chiếm dung lượng, không đụng dữ liệu). Người 3 chỉ cần thêm tên view vào tham số đã có sẵn trong `main.py`:
+
+```powershell
+spark-submit --conf spark.hadoop.hive.metastore.uris=thrift://<IP>:9083 `
+  --conf spark.hadoop.fs.defaultFS=hdfs://<IP>:8020 `
+  --conf spark.hadoop.dfs.client.use.datanode.hostname=true `
+  --conf spark.sql.catalogImplementation=hive `
+  main.py --clean-table clean_nyc_taxi_tlc --raw-table raw_nyc_taxi
+```
+
+`--output-base hdfs:///user/hive/warehouse/nyc_taxi_analytics` mặc định dùng được luôn vì `fs.defaultFS` đã trỏ vào cluster. Hai lưu ý trung thực: (a) `tpep_*` trong raw là mốc thời gian **UTC** theo cách TLC ghi file, nên `year()/hour()` suy từ cột có thể lệch vài giờ so với partition `year=/month=` — số của clean (đã chuẩn sang giờ địa phương NYC) mới là số để báo cáo; (b) view chỉ đổi tên và khai lại kiểu cho đúng những gì file Parquet đang mang, **không** tính lại đơn vị hay giá trị nào.
+
+Mảnh 1 đã chạy **chính code của Người 3** thay họ trước khi họ bật máy: `1-warehouse/src/verify_person3_pipeline.py` import nguyên `analysis.py`, `data_loader.py`, `evaluation.py`, `feature_engineering.py`, `model.py`, `writer.py` trong `3-analytics/` (chỉ đọc, không sửa một dòng nào) và gọi đúng thứ tự như `main.py` trên partition 2024-01. **PASS 6/6 nhóm hàm trong 521 s**: `load_clean_trips` qua view → 2.924.072 dòng; 4 câu SQL → 5.296 dòng analytics / 24 dòng theo giờ / 168 ô heatmap; `load_raw_trips` + cancelled → 37.448 cuốc huỷ của 2024-01; feature + chronological split → train 62.528 / test 14.884; GBT + metrics; `writer.py` ghi 2 Parquet + 1 CSV lên HDFS (`/tmp/nyc_taxi_analytics_smoke`).
+
+Hai điều Người 3 nên đọc trước khi tốn một ngày:
+1. **`CAST(tpep_dropoff_datetime AS BIGINT)` trong `analysis.py` không chạy được trực tiếp trên `clean_nyc_taxi`** (`DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION` vì cột là `TIMESTAMP_NTZ`). View `clean_nyc_taxi_tlc` đã cast sang `TIMESTAMP`, và số nó cho khớp tuyệt đối với cột `trip_duration_min` (17,1653 phút ở 2026-08, lệch 0,000000). Qua view thì không phải sửa code.
+2. **Với cấu hình smoke một tháng + `maxIter=10`, GBT tệ hơn baseline**: RMSE 48,00 so với 29,48, MAPE 923% so với 89%. Đây là hệ quả của việc chỉ huấn luyện trên `2024-01` (77.412 dòng zone×ngày), không phải tín hiệu model sai — chạy cả năm rồi mới kết luận.
+
+Còn một va chạm môi trường: `.venv` của mảnh 2 không có `numpy` nên `pyspark.ml` (tức `evaluation.py`) không import được; máy này phải dùng Python 3.11 hệ thống (pyspark 4.0.1 + numpy 2.4.6 + pyarrow 24.0.0). Env của Người 3 chỉ cần có numpy là chạy bình thường.
+
+### Việc còn treo sau mục 9
+
+- `raw_nyc_taxi` đã đối chiếu **tổng** 1.516.766.780 = đúng tổng footer 188 tháng trong `source_manifest.csv`, và một scan thật đã đọc trọn cả 188 partition; **chưa** so số dòng *từng tháng* với manifest.
+- Docker Desktop trên máy này hai lần tự tắt engine (containers `Exited (255)`) — cách hồi phục ghi ở README mảnh 1, mục 7.
+- Máy đổi mạng Wi-Fi làm IP host thay đổi (đã quan sát 192.168.100.19 → 192.168.36.64 → về cũ): chạy `1-warehouse/tools/Set-Host.ps1` rồi đăng ký lại bảng, vì Derby ghi chết location của database.
+
