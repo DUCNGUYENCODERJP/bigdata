@@ -1,0 +1,24 @@
+// ==============================================================================
+// 03. THƯỚC ĐO ĐÁNH GIÁ MÔ HÌNH MACHINE LEARNING (ML EVALUATION MEASURES)
+// ==============================================================================
+
+// 1. Tỷ lệ cải thiện RMSE của GBT so với Baseline:
+RMSE_Improvement_Pct = 
+VAR BaseRMSE = CALCULATE(MAX('metrics'[rmse]), 'metrics'[model] = "zone_hour_mean_baseline")
+VAR GbtRMSE = CALCULATE(MAX('metrics'[rmse]), 'metrics'[model] = "gbt_regressor")
+RETURN
+IF(BaseRMSE > 0, (BaseRMSE - GbtRMSE) / BaseRMSE, 0)
+
+// 2. Tỷ lệ cải thiện MAE của GBT so với Baseline:
+MAE_Improvement_Pct = 
+VAR BaseMAE = CALCULATE(MAX('metrics'[mae]), 'metrics'[model] = "zone_hour_mean_baseline")
+VAR GbtMAE = CALCULATE(MAX('metrics'[mae]), 'metrics'[model] = "gbt_regressor")
+RETURN
+IF(BaseMAE > 0, (BaseMAE - GbtMAE) / BaseMAE, 0)
+
+// 3. Tỷ lệ cải thiện MAPE của GBT so với Baseline:
+MAPE_Improvement_Pct = 
+VAR BaseMAPE = CALCULATE(MAX('metrics'[mape]), 'metrics'[model] = "zone_hour_mean_baseline")
+VAR GbtMAPE = CALCULATE(MAX('metrics'[mape]), 'metrics'[model] = "gbt_regressor")
+RETURN
+IF(BaseMAPE > 0, (BaseMAPE - GbtMAPE) / BaseMAPE, 0)

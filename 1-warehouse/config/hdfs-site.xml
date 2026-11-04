@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- File goc o /opt/hadoop/etc/hadoop/hdfs-site.xml trong anh apache/hadoop:3.4.1 -->
+<configuration>
+  <!-- 1 NameNode + 1 DataNode nen replication=1; de 2 or 3 thi block luon under-replicated. -->
+  <property>
+    <name>dfs.replication</name>
+    <value>1</value>
+  </property>
+
+  <property>
+    <name>dfs.blocksize</name>
+    <value>134217728</value>
+  </property>
+
+  <property>
+    <name>dfs.namenode.rpc-address</name>
+    <value>namenode:8020</value>
+  </property>
+
+  <property>
+    <name>dfs.namenode.http-address</name>
+    <value>namenode:9870</value>
+  </property>
+
+  <property>
+    <name>dfs.namenode.name.dir</name>
+    <value>file:///opt/hadoop/dfs/name</value>
+  </property>
+
+  <property>
+    <name>dfs.datanode.data.dir</name>
+    <value>file:///opt/hadoop/dfs/data</value>
+  </property>
+
+  <!-- Bind tat ca interface de Docker publish duoc len host. -->
+  <property>
+    <name>dfs.datanode.address</name>
+    <value>0.0.0.0:9866</value>
+  </property>
+
+  <property>
+    <name>dfs.datanode.http.address</name>
+    <value>0.0.0.0:9864</value>
+  </property>
+
+  <!-- DAY LA LOI DA CHET DUONG TRUYEN ben may Người 1: NameNode tra ve dia chi DataNode
+       ma no tu quang ba, mac dinh la ten container (hdfs-datanode-1) ma client ben ngoai
+       khong phan giai duoc -> "Bad connection to BlockPool" / "getaddrinfo failed".
+       Da do tren may nay: host.docker.internal phan giai ve 192.168.110.5 la dia chi
+       KHONG thuoc may (timeout ca tu Windows lan container), con IP Wi-Fi that
+       192.168.100.19 thi OK tu Windows (9864/9870/8020) va tu trong container.
+        Khi doi mang (IP lai), sua gia tri nay roi khoi dong lai datanode.
+
+       2026-11-02 (do them bang client thuan 3.4.1 tren Windows): neu quang ba DUNG IP
+       192.168.100.19 thi DFSClient so voi dia chi cua chinh no (InetAddress.getLocalHost
+       cung tra ve 192.168.100.19) -> coi DataNode la "local node" va loai khoi pipeline
+       ngay tu addBlock dau tien, khong kip connect: "could only be written to 0 of the 1
+       minReplication nodes. There are 1 datanode(s) running and 1 node(s) are excluded".
+       Giai phap: quang ba mot BIA DUNG (alias) tro ve cung IP nhung khac chuoi dia chi
+       cua may. sslip.io la DNS wildcard cong cong: 192-168-100-19.sslip.io -> 192.168.100.19,
+       phan giai OK ca tu Windows lan trong container, khong phai sua file hosts may nao.
+       Doi IP (chuyen Wi-Fi) thi doi ca chuoi 192-168-100-19 trong ten nay.
+
+       2026-11-03: may nay chuyen sang mang khac, IP Wi-Fi la 192.168.36.64 (con
+       192.168.100.19 da khong ton tai). Dong "host.docker.internal -> 192.168.110.5"
+       trong C:\Windows\System32\drivers\etc\hosts la record cu cua Docker Desktop;
+       khong ai lang nghe o dia chi do nua -> moi connect huong ve no deu timeout.
+       Khi IP doi phai sua 3 cho: gia tri ben duoi, metastore.warehouse.dir trong
+       hive-site.xml, va chuoi IP ma client dung (hive.metastore.uris, fs.defaultFS).
+
+       2026-11-03 (cuoi ngay, doi ching lai): may da quay ve mang cu, ipconfig cho
+       thay 192.168.100.19 - dung bang gia tri dang chay duoi day va cluster dang
+       healthy. Con so 192.168.36.64 o tren chi dung trong khoang thoi gian giua
+       hai lan chuyen mang. Thoi quen dung: dung sua tay tung cho, chay
+       .\tools\Set-Host.ps1 (no bao dam du 3 cho tren + alias sslip.io). -->
+  <property>
+    <name>dfs.datanode.hostname</name>
+    <value>192-168-100-19.sslip.io</value>
+  </property>
+
+  <property>
+    <name>dfs.datanode.use.datanode.hostname</name>
+    <value>true</value>
+  </property>
+
+  <!-- Mat phia CLIENT, bo sung 2026-11-02 sau khi do that bai tren Spark tren Windows.
+       `dfs.datanode.use.datanode.hostname` chi anh huong luc DataNode dang ky; khi tra
+       LocatedBlock cho client, NameNode van gui kem ipAddr = 172.18.0.3 (IP noi bo Docker).
+       Client mac dinh dung ipAddr do -> SYN khong ai tra -> "java.net.ConnectException:
+       Connection timed out: getsockopt" trong DataStreamer.createBlockOutputStream, roi
+       NameNode bao "could only be written to 0 of the 1 minReplication nodes ... 1
+       node(s) are excluded". Bat co nay thi client dung hostname
+       (alias <ip-dau-cham>.sslip.io:9866 thay vi 172.18.0.4:9866).
+       WebHDFS khong bi vi redirect 307 luon dung hostname. -->
+  <property>
+    <name>dfs.client.use.datanode.hostname</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <name>dfs.webhdfs.enabled</name>
+    <value>true</value>
+  </property>
+
+  <!-- Bai tap nhom, khong co Kerberos: tat kiem tra permission de tranh loi user khac nhau. -->
+  <property>
+    <name>dfs.permissions.enabled</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>dfs.namenode.datanode.registration.ip-hostname-check</name>
+    <value>false</value>
+  </property>
+</configuration>

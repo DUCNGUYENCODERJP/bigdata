@@ -1,0 +1,58 @@
+// ==============================================================================
+// 01. CÁC CỘT TÍNH TOÁN (CALCULATED COLUMNS)
+// ==============================================================================
+
+// --- BẢNG: demand_heatmap ---
+
+// 1. Chuyển đổi mã ngày Spark (1 = Sunday) sang tên Thứ:
+Day_Name = 
+SWITCH(
+    'demand_heatmap'[day_of_week],
+    1, "Chủ Nhật",
+    2, "Thứ Hai",
+    3, "Thứ Ba",
+    4, "Thứ Tư",
+    5, "Thứ Năm",
+    6, "Thứ Sáu",
+    7, "Thứ Bảy",
+    "Không xác định"
+)
+
+// 2. Cột sắp xếp thứ tự hiển thị (Thứ Hai -> Chủ Nhật):
+// Chọn cột Day_Name -> Sort by Column -> chọn Day_Sort_Order
+Day_Sort_Order = 
+SWITCH(
+    'demand_heatmap'[day_of_week],
+    2, 1, // Thứ Hai
+    3, 2, // Thứ Ba
+    4, 3, // Thứ Tư
+    5, 4, // Thứ Năm
+    6, 5, // Thứ Sáu
+    7, 6, // Thứ Bảy
+    1, 7  // Chủ Nhật
+)
+
+// 3. Định dạng nhãn khung giờ hiển thị (vd: 08:00):
+Hour_Display = FORMAT('demand_heatmap'[pickup_hour], "00") & ":00"
+
+
+// --- BẢNG: predictions ---
+
+// 4. Tên thứ cho bảng dự báo:
+Day_Name_Pred = 
+SWITCH(
+    'predictions'[day_of_week],
+    1, "Chủ Nhật",
+    2, "Thứ Hai",
+    3, "Thứ Ba",
+    4, "Thứ Tư",
+    5, "Thứ Năm",
+    6, "Thứ Sáu",
+    7, "Thứ Bảy"
+)
+
+// 5. Sai số tuyệt đối của GBT:
+GBT_Absolute_Error = ABS('predictions'[label] - 'predictions'[gbt_prediction])
+
+// 6. Sai số tuyệt đối của Baseline:
+Baseline_Absolute_Error = ABS('predictions'[label] - 'predictions'[baseline_prediction])

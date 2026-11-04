@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NYC TLC Yellow Taxi — Big Data & Machine Learning Dashboard</title>
+  
+  <!-- External CSS -->
+  <link rel="stylesheet" href="assets/css/dashboard.css">
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="header-title">
+      <h1>🚖 NYC TLC Yellow Taxi Analytics & BI <span class="badge">Enterprise Dashboard</span></h1>
+      <p>Hệ thống phân tích nhu cầu và dự báo điều hành thông minh | Apache Hadoop • Apache Hive • Apache Spark ML</p>
+    </div>
+    <div class="header-actions">
+      <button class="btn" onclick="window.print()">🖨️ Xuất Báo Cáo / In PDF</button>
+      <button class="btn btn-primary" onclick="window.location.reload()">🔄 Làm Mới Dữ Liệu</button>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab(0)">📊 Nhu Cầu & Bản Đồ Thành Phố</button>
+    <button class="tab-btn" onclick="switchTab(1)">💰 Giá Cước, Thời Gian & Tỷ Lệ Hủy</button>
+    <button class="tab-btn" onclick="switchTab(2)">🤖 Mô Hình Dự Báo Machine Learning</button>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- TAB 1: EXECUTIVE OVERVIEW & DEMAND HEATMAP -->
+  <!-- ========================================================================= -->
+  <div id="tab-0" class="tab-content active">
+    
+    <!-- Top KPIs -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <span class="kpi-label">Tổng Cuốc Xe Trong Kho</span>
+        <div class="kpi-value">1.506 Tỷ</div>
+        <span class="kpi-desc">188 tháng (2011–2026), 33.59 GiB Parquet sạch</span>
+      </div>
+      <div class="kpi-card success">
+        <span class="kpi-label">Lưu Lượng Bình Quân Tháng</span>
+        <div class="kpi-value">2.92 Triệu</div>
+        <span class="kpi-desc">Mẫu phân tích tổng hợp đại diện</span>
+      </div>
+      <div class="kpi-card accent">
+        <span class="kpi-label">Giá Cước Trung Bình</span>
+        <div class="kpi-value">$17.85</div>
+        <span class="kpi-desc">Dao động từ $16.20 đến $22.50 theo giờ</span>
+      </div>
+      <div class="kpi-card purple">
+        <span class="kpi-label">Thời Gian Di Chuyển TB</span>
+        <div class="kpi-value">17.2 phút</div>
+        <span class="kpi-desc">Đỉnh điểm 23.5 phút lúc 18h tan tầm</span>
+      </div>
+    </div>
+
+    <!-- Charts Row 1 -->
+    <div class="grid-2">
+      <!-- Borough Distribution -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">📍 Thị Phần Nhu Cầu Theo Quận (Borough Share)</div>
+            <div class="card-subtitle">Manhattan chiếm ưu thế tuyệt đối trong lưu lượng Yellow Taxi</div>
+          </div>
+        </div>
+        <div style="height: 280px; display: flex; justify-content: center;">
+          <canvas id="chartBorough"></canvas>
+        </div>
+      </div>
+
+      <!-- Top Pickup Zones -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">🏆 Top 8 Khu Vực Đón Xe Đông Nhất (PULocationID)</div>
+            <div class="card-subtitle">Điểm nóng tập trung ở khu Trung tâm và Sân bay quốc tế</div>
+          </div>
+        </div>
+        <div style="height: 280px;">
+          <canvas id="chartTopZones"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Demand Heatmap 24x7 -->
+    <div class="card grid-full">
+      <div class="card-header">
+        <div>
+          <div class="card-title">🔥 Ma Trận Nhiệt Nhu Cầu Đi Xe (Hour × Day of Week Heatmap)</div>
+          <div class="card-subtitle">Phân bố lưu lượng theo khung giờ và ngày trong tuần | Đỉnh điểm chiều tối các ngày làm việc và đêm cuối tuần</div>
+        </div>
+      </div>
+      <div class="heatmap-container" id="heatmapWrapper"></div>
+    </div>
+
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- TAB 2: FARE, TRAVEL TIME & CANCELLED TRIPS -->
+  <!-- ========================================================================= -->
+  <div id="tab-1" class="tab-content">
+    
+    <div class="kpi-grid">
+      <div class="kpi-card accent">
+        <span class="kpi-label">Cước Sân Bay Cố Định</span>
+        <div class="kpi-value">$52.00 - $70.00</div>
+        <span class="kpi-desc">Tuyến JFK ↔ Manhattan áp dụng biểu cước riêng</span>
+      </div>
+      <div class="kpi-card danger">
+        <span class="kpi-label">Tổng Cuốc Xe Bị Hủy</span>
+        <div class="kpi-value">5.02 Triệu</div>
+        <span class="kpi-desc">Cuốc xe có giá cước âm hoặc hoàn tiền (0.33% toàn hệ thống)</span>
+      </div>
+      <div class="kpi-card purple">
+        <span class="kpi-label">Năm Tỷ Lệ Hoàn Cước Cao Nhất</span>
+        <div class="kpi-value">2025 (8% - 11%)</div>
+        <span class="kpi-desc">Giai đoạn ghi nhận tỷ lệ hoàn cước đột biến từ hệ thống</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Khung Giờ Tắc Đường Nhất</span>
+        <div class="kpi-value">17h00 – 19h00</div>
+        <span class="kpi-desc">Thời lượng trung bình tăng 92% so với sáng sớm</span>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <!-- Hourly Fare & Duration Trend -->
+      <div class="card grid-full">
+        <div class="card-header">
+          <div>
+            <div class="card-title">📈 Biến Động Giá Cước & Thời Lượng Di Chuyển Theo 24 Giờ Trong Ngày</div>
+            <div class="card-subtitle">Sáng sớm cước cao do các tuyến đường dài ra sân bay; Chiều tối ùn tắc kéo dài thời gian di chuyển</div>
+          </div>
+        </div>
+        <div style="height: 320px;">
+          <canvas id="chartHourlyCombo"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <!-- Cancelled Trips by Hour -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">🚫 Phân Bố Cuốc Xe Bị Hủy Theo Khung Giờ</div>
+            <div class="card-subtitle">Số lượng cuốc bị hoàn cước tập trung vào khung giờ chiều tối</div>
+          </div>
+        </div>
+        <div style="height: 260px;">
+          <canvas id="chartCancelledHours"></canvas>
+        </div>
+      </div>
+
+      <!-- Cancelled Trips Rate by Year -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">⚠️ Tỷ Lệ Cuốc Xe Bị Hủy / Hoàn Cước Theo Năm</div>
+            <div class="card-subtitle">Đánh giá rủi ro doanh thu và chất lượng bản ghi dữ liệu</div>
+          </div>
+        </div>
+        <div style="height: 260px;">
+          <canvas id="chartCancelledYears"></canvas>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- TAB 3: MACHINE LEARNING FORECAST & EVALUATION -->
+  <!-- ========================================================================= -->
+  <div id="tab-2" class="tab-content">
+    
+    <div class="kpi-grid">
+      <div class="kpi-card success">
+        <span class="kpi-label">Mô Hình Học Máy Dự Báo</span>
+        <div class="kpi-value">GBTRegressor</div>
+        <span class="kpi-desc">Gradient Boosted Trees (Apache Spark MLlib)</span>
+      </div>
+      <div class="kpi-card success">
+        <span class="kpi-label">Độ Cải Thiện RMSE</span>
+        <div class="kpi-value">+41.2%</div>
+        <span class="kpi-desc">Từ 42.15 (Baseline) giảm xuống 24.80 (GBT)</span>
+      </div>
+      <div class="kpi-card success">
+        <span class="kpi-label">Độ Cải Thiện MAE</span>
+        <div class="kpi-value">+47.3%</div>
+        <span class="kpi-desc">Từ 31.40 (Baseline) giảm xuống 16.55 (GBT)</span>
+      </div>
+      <div class="kpi-card success">
+        <span class="kpi-label">Độ Cải Thiện MAPE</span>
+        <div class="kpi-value">+58.8%</div>
+        <span class="kpi-desc">Từ 45.2% (Baseline) giảm xuống 18.6% (GBT)</span>
+      </div>
+    </div>
+
+    <!-- Comparison Table -->
+    <div class="card grid-full">
+      <div class="card-header">
+        <div>
+          <div class="card-title">📊 Bảng So Sánh Chỉ Số Đánh Giá (Model Evaluation Metrics)</div>
+          <div class="card-subtitle">Đánh giá trên tập kiểm thử độc lập (20% dữ liệu chuỗi thời gian)</div>
+        </div>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Tên Mô Hình</th>
+            <th>Loại Phương Pháp</th>
+            <th>RMSE (Sai Số Căn Phương)</th>
+            <th>MAE (Sai Số Tuyệt Đối)</th>
+            <th>MAPE (%) (Tỷ Lệ Sai Số)</th>
+            <th>Đánh Giá Hiệu Năng</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>zone_hour_mean_baseline</strong></td>
+            <td>Trung bình lịch sử theo (Khu vực × Giờ)</td>
+            <td>42.1540</td>
+            <td>31.4025</td>
+            <td>45.20%</td>
+            <td><span class="tag-baseline">Mô hình Cơ Sở (Baseline)</span></td>
+          </tr>
+          <tr>
+            <td><strong>gbt_regressor</strong></td>
+            <td>Spark ML GBTRegressor + OneHotEncoder</td>
+            <td><strong>24.8012</strong></td>
+            <td><strong>16.5540</strong></td>
+            <td><strong>18.60%</strong></td>
+            <td><span class="tag-better">⭐ Tối ưu (+47% độ chính xác)</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Forecast Time Series Chart -->
+    <div class="card grid-full">
+      <div class="card-header">
+        <div>
+          <div class="card-title">📈 Biểu Đồ Chuỗi Thời Gian: Nhu Cầu Thực Tế vs Mô Hình Dự Báo</div>
+          <div class="card-subtitle">Mô hình GBT nắm bắt chính xác các đỉnh cao điểm tan tầm và chu kỳ cuối tuần hơn hẳn Baseline</div>
+        </div>
+      </div>
+      <div style="height: 340px;">
+        <canvas id="chartForecast"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <p>Big Data Platform & Analytics — NYC TLC Yellow Taxi • Apache Hadoop • Apache Hive • Apache Spark ML • Power BI</p>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="assets/js/app.js"></script>
+  <script src="assets/js/heatmap.js"></script>
+  <script src="assets/js/charts.js"></script>
+</body>
+</html>
