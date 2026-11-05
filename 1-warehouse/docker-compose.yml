@@ -9,6 +9,10 @@ services:
     image: apache/hadoop:3.4.1
     container_name: nyc-namenode
     hostname: namenode
+    # Tu song lai sau khi may reboot / Docker Desktop khoi dong lai. Thieu dong nay
+    # thi moi lan Docker tat la ca 4 container "Exited (255)" va kho chim den khi
+    # co nguoi bo lenh `docker compose up -d` (dan ra ngay 2026-11-05).
+    restart: unless-stopped
     # Anh chay mac dinh bang user hadoop (uid 1000), nhung script hdfs tu choi
     # namenode/datanode neu nguoi dung khong khop HDFS_*_USER => ep ve root.
     user: root
@@ -40,6 +44,7 @@ services:
     image: apache/hadoop:3.4.1
     container_name: nyc-datanode
     hostname: datanode
+    restart: unless-stopped
     user: root
     depends_on:
       namenode:
@@ -66,6 +71,7 @@ services:
     image: apache/hive:3.1.3
     container_name: nyc-metastore
     hostname: metastore
+    restart: unless-stopped
     depends_on:
       datanode:
         condition: service_started
@@ -101,6 +107,7 @@ services:
   client:
     image: apache/hadoop:3.4.1
     container_name: nyc-client
+    restart: unless-stopped
     user: root
     depends_on:
       namenode:

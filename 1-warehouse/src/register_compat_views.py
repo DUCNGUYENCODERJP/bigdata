@@ -18,7 +18,7 @@ Chạy lại bao nhiêu lần cũng được: `CREATE OR REPLACE VIEW` chỉ ghi
     $env:JAVA_HOME = "C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.15.6-hotspot"
     $env:HADOOP_HOME = "D:\\hadoop"
     D:\\BIGDATA\\2-processing\\.venv\\Scripts\\python.exe `
-        D:\\BIGDATA\\1-warehouse\\src\\register_compat_views.py --host 192.168.100.19
+        D:\\BIGDATA\\1-warehouse\\src\\register_compat_views.py
 """
 
 from __future__ import annotations
@@ -30,6 +30,8 @@ import time
 
 from pyspark.sql import SparkSession
 from pyspark.sql.types import TimestampType
+
+from warehouse_host import resolve_host
 
 SOURCE_TABLE = "clean_nyc_taxi"
 VIEW_NAME = "clean_nyc_taxi_tlc"
@@ -102,9 +104,11 @@ def build_spark(host: str) -> SparkSession:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=f"Tạo view {VIEW_NAME} cho 3-analytics.")
-    parser.add_argument("--host", default=os.environ.get("WAREHOUSE_HOST", "192.168.100.19"))
+    parser.add_argument("--host", default=None,
+                        help="IP máy chạy cluster; thiếu thì tự phát hiện (xem warehouse_host.py).")
     parser.add_argument("--database", default="default")
     args = parser.parse_args()
+    args.host = resolve_host(args.host)
 
     started = time.monotonic()
     spark = build_spark(args.host)

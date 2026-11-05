@@ -83,6 +83,12 @@ $py = "D:\BIGDATA\2-processing\.venv\Scripts\python.exe"
                                                     #   (LENH NAY CAN Python 3.11, xem ghi chu duoi)
 ```
 
+Từ 2026-11-05 cả năm script trên **bỏ được `--host`**: `src/warehouse_host.py` tự lấy IP của
+interface có đường dẫn mặc định (đúng cách `Set-Host.ps1` làm) và in ra dòng
+`[host] tu phat hien ...` để kiểm chứng. Thứ tự ưu tiên là `--host` > `WAREHOUSE_HOST` > tự phát
+hiện. Lý do: các mặc định cũ chứa IP chết (`192.168.100.19`, `192.168.36.64`) và IP chết thì
+không báo lỗi rõ — Spark treo ở bước tìm Thrift, người đọc log kết luận oan "cluster chết".
+
 Raw lên HDFS bằng cùng `HdfsCopy` nhưng thêm tham số `tlc` ở cuối để đổi tên đường
 `yellow_tripdata_2024-01.parquet` → `year=2024/month=1/part-2024-01.parquet` (chỉ đổi chỗ ghi,
 nội dung file vẫn nguyên byte). File không theo khuôn (ví dụ `taxi_zone_lookup.csv`) bị dồn vào
@@ -282,6 +288,22 @@ chạy lại `register_hive_tables.py --host <IP mới>` vì location của data
 trong catalog Derby. Khi cần dựng catalog sach, `-RebuildCatalog` **đổi tên** thư mục
 `metastore_db` cũ thành `metastore_db_ipcu_<timestamp>` chứ không xoá.
 
+**2026-11-05 — lần đầu tiên kịch bản này xảy ra thật, đã đo lại toàn bộ.** Máy reboot, Docker
+Desktop khởi động lại, cả bốn container nằm ở `Exited (255)` suốt ~18 giờ vì `restart` policy
+là `no`; IP mới là `192.168.100.17` (`.19` chết). Trình tự đã chạy và kết quả:
+`docker compose up -d` → `/data/nyc_taxi` vẫn **415 thư mục / 1.636 file / 56.775.084.510 B**,
+0 block corrupt/missing → `.\Set-Host.ps1 -Ip 192.168.100.17 -RebuildCatalog` →
+`register_hive_tables.py` (108 s, 1.506.791.871 dòng) → `register_raw_nyc_taxi.py` (262 s,
+1.516.766.780 dòng) → `register_compat_views.py` (45 s) → `verify_access.py` **PASS**.
+Thời gian nhanh hơn con số 587 s ghi ở mục 3 vì cache Parquet của Spark đã ấm; số dòng thì
+khớp từng con số, tức dữ liệu không đổi một byte nào sau reboot.
+Hai sửa phòng ngừa đã đưa vào repo từ hôm đó: `restart: unless-stopped` cho cả bốn service
+trong `docker-compose.yml`, và `src/warehouse_host.py` để script tự phát hiện IP.
+**Rủi ro còn lại nằm ngoài repo**: Docker Desktop của máy này đặt `"AutoStart": false` và
+`com.docker.service` ở chế độ Manual, nên reboot thì engine không tự bật. Phải tick
+*Start Docker Desktop when you sign in* trong GUI Settings, nếu không thì ai đó phải mở app
+và chạy `docker compose up -d` trước khi Người 3 làm việc (xem mục 9).
+
 ## 7. Những chỗ đã làm hỏng và cách tránh (đọc trước khi sửa config)
 
 - **`apache/hive:standalone-metastore-4.1.0` trở lên không dùng được với Spark 4.0.1.** Spark
@@ -304,6 +326,8 @@ trong catalog Derby. Khi cần dựng catalog sach, `-RebuildCatalog` **đổi t
 - **Docker Desktop trên máy này tự tắt engine** (containers `Exited (255)`, pipe
   `dockerDesktopLinuxEngine` mất). Cách hồi phục: khởi động lại Docker Desktop, chờ
   `docker info` thành công, rồi `docker compose up -d`. Dữ liệu trên volume không mất.
+  Từ 2026-11-05 cả bốn service có `restart: unless-stopped` nên container tự dậy theo engine;
+  nhưng engine vẫn không tự dậy vì app chưa đặt autostart — phần đó chỉ sửa được trong GUI.
 - Cảnh báo `The configured local directories are not expected to be URIs ... [D:/tmp/spark]`
   của Spark là vô hại (Spark tự chấp nhận đường dẫn Windows), không phải lỗi.
 

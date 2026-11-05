@@ -11,7 +11,7 @@
 # Cach dung (PowerShell 5.1 tro len):
 #   Set-Location D:\BIGDATA\1-warehouse\tools
 #   .\Set-Host.ps1                       # tu phat hien IP cua mang dang co duong dan mac dinh
-#   .\Set-Host.ps1 -Ip 192.168.100.19    # chi dinh ro
+#   .\Set-Host.ps1 -Ip 192.168.100.17    # chi dinh ro (lay IP theo ipconfig, KHONG dung vi du nay)
 #   .\Set-Host.ps1 -RebuildCatalog       # + doi ten catalog cu, khoi dong lai metastore schema sach
 #
 # Script KHONG xoa file nao. Catalog cu chi duoi doi thanh

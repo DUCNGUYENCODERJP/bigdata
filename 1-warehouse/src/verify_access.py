@@ -10,7 +10,10 @@ Chay:
     $env:JAVA_HOME = "C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.15.6-hotspot"
     $env:HADOOP_HOME = "D:\\hadoop"
     D:\\BIGDATA\\2-processing\\.venv\\Scripts\\python.exe `
-        D:\\BIGDATA\\1-warehouse\\src\\verify_access.py --host 192.168.36.64
+        D:\\BIGDATA\\1-warehouse\\src\\verify_access.py
+
+Thieu `--host` thi script tu phat hien IP cua may (warehouse_host.py) - chi can
+`--host <IP>` khi kho nam o MAY KHAC, luc do <IP> la IP cua may chay Docker.
 """
 
 from __future__ import annotations
@@ -21,15 +24,18 @@ import sys
 
 from pyspark.sql import SparkSession
 
+from warehouse_host import resolve_host
+
 EXPECTED_ROWS = 1_506_791_871
 EXPECTED_PARTITIONS = 188
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Kiem tra spark.table('clean_nyc_taxi') tu may client.")
-    parser.add_argument("--host", default=os.environ.get("WAREHOUSE_HOST", "192.168.36.64"),
-                        help="IP may dang chay cluster slice 1.")
+    parser.add_argument("--host", default=None,
+                        help="IP máy chạy cluster slice 1; thiếu thì tự phát hiện (warehouse_host.py).")
     args = parser.parse_args()
+    args.host = resolve_host(args.host)
 
     spark = (
         SparkSession.builder.master("local[*]").appName("verify-access")

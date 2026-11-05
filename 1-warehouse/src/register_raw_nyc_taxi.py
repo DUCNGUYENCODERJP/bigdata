@@ -41,7 +41,7 @@ Chạy (Python là bản trong .venv của mảnh 2, JDK 17, HADOOP_HOME=D:\\had
     $env:JAVA_HOME = "C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.15.6-hotspot"
     $env:HADOOP_HOME = "D:\\hadoop"
     D:\\BIGDATA\\2-processing\\.venv\\Scripts\\python.exe `
-        D:\\BIGDATA\\1-warehouse\\src\\register_raw_nyc_taxi.py --host 192.168.100.19
+        D:\\BIGDATA\\1-warehouse\\src\\register_raw_nyc_taxi.py
 """
 
 from __future__ import annotations
@@ -54,6 +54,8 @@ import sys
 import time
 
 from pyspark.sql import SparkSession
+
+from warehouse_host import resolve_host
 
 HDFS_RAW_ROOT = "/data/nyc_taxi/raw/trips"
 TABLE_NAME = "raw_nyc_taxi"
@@ -189,14 +191,15 @@ def registered_location(spark: SparkSession, qualified: str) -> str | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=f"Tạo bảng Hive {TABLE_NAME} trên HDFS.")
-    parser.add_argument("--host", default=os.environ.get("WAREHOUSE_HOST", "192.168.100.19"),
-                        help="IP thật của máy chạy cluster (nơi 8020/9083 mở ra host).")
+    parser.add_argument("--host", default=None,
+                        help="IP máy chạy cluster; thiếu thì tự phát hiện (warehouse_host.py).")
     parser.add_argument("--manifest", default=DEFAULT_MANIFEST,
                         help="source_manifest.csv của mảnh 2 — nguồn schema union, không mở file Parquet.")
     parser.add_argument("--skip-count", action="store_true",
                         help="Chỉ đăng ký + đối chiếu partition, không đếm dòng toàn bảng.")
     parser.add_argument("--database", default="default")
     args = parser.parse_args()
+    args.host = resolve_host(args.host)
 
     hdfs_uri = f"hdfs://{args.host}:8020"
     location = f"{hdfs_uri}{HDFS_RAW_ROOT}"

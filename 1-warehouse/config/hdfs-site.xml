@@ -72,10 +72,18 @@
        thay 192.168.100.19 - dung bang gia tri dang chay duoi day va cluster dang
        healthy. Con so 192.168.36.64 o tren chi dung trong khoang thoi gian giua
        hai lan chuyen mang. Thoi quen dung: dung sua tay tung cho, chay
-       .\tools\Set-Host.ps1 (no bao dam du 3 cho tren + alias sslip.io). -->
+       .\tools\Set-Host.ps1 (no bao dam du 3 cho tren + alias sslip.io).
+
+       2026-11-05: Docker Desktop khoi dong lai cung may (4 container "Exited (255)"),
+       may bat lai tren mang khac voi IP 192.168.100.17; Set-Host.ps1 -RebuildCatalog
+       da dong bo ca 3 cho va gia tri ben duoi la gia tri DANG CHAY. LUU Y CACH DOC:
+       moi con so IP trong doan tren chi la nhan vat cua lich su do dac, KHONG copy
+       no vao lenh; lan nao cung phai lay IP hien tai (ipconfig) hoac de script tu
+       phat hien (src/warehouse_host.py). Cung ngay: ca 4 service trong
+       docker-compose.yml them `restart: unless-stopped` de tu song lai sau reboot. -->
   <property>
     <name>dfs.datanode.hostname</name>
-    <value>192-168-100-19.sslip.io</value>
+    <value>192-168-100-17.sslip.io</value>
   </property>
 
   <property>

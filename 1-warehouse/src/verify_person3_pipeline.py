@@ -20,7 +20,7 @@ dùng — nên script chạy bằng interpreter đó.
     $env:JAVA_HOME = "C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.15.6-hotspot"
     $env:HADOOP_HOME = "D:\\hadoop"
     & "C:\\Users\\ThinkPad\\AppData\\Local\\Programs\\Python\\Python311\\python.exe" `
-        D:\\BIGDATA\\1-warehouse\\src\\verify_person3_pipeline.py --host 192.168.100.19
+        D:\\BIGDATA\\1-warehouse\\src\\verify_person3_pipeline.py
 """
 
 from __future__ import annotations
@@ -31,6 +31,8 @@ import sys
 import time
 
 from pyspark.sql import SparkSession, functions as F
+
+from warehouse_host import resolve_host
 
 ANALYTICS_DIR = os.environ.get("ANALYTICS_DIR", r"D:\BIGDATA\3-analytics")
 CLEAN_TABLE = "clean_nyc_taxi_tlc"
@@ -67,10 +69,12 @@ def build_spark(host: str) -> SparkSession:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Chạy thử pipeline của Người 3 trên kho mảnh 1.")
-    parser.add_argument("--host", default=os.environ.get("WAREHOUSE_HOST", "192.168.100.19"))
+    parser.add_argument("--host", default=None,
+                        help="IP máy chạy cluster; thiếu thì tự phát hiện (warehouse_host.py).")
     parser.add_argument("--hdfs-out", default="/tmp/nyc_taxi_analytics_smoke",
                         help="Thư mục HDFS nhận output cuoi cung (chi de do, khong phai bang chinh thuc).")
     args = parser.parse_args()
+    args.host = resolve_host(args.host)
 
     if not os.path.isdir(ANALYTICS_DIR):
         print(f"[FAIL] Khong thay thu muc ma cua Nguoi 3: {ANALYTICS_DIR}")
