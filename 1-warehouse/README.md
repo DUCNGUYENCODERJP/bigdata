@@ -115,6 +115,10 @@ nên `pyspark.ml` không import nổi. Dùng Python 3.11 hệ thống của máy
 
 ## 4. Người 3 / Người 4 cần đặt gì
 
+> Bản rút gọn để copy-paste, cập nhật theo trạng thái kho ngày 2026-11-05:
+> [`docs/HUONG_DAN_NGUOI_3.md`](docs/HUONG_DAN_NGUOI_3.md). Mục 4 dưới đây là bản giải thích vì sao
+> cần đúng ba cấu hình đó.
+
 Chỉ ba cấu hình, không cần file dữ liệu, không cần biết đường dẫn Parquet:
 
 ```python
