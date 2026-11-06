@@ -42,6 +42,10 @@ luu DOUBLE, khong kieu Parquet nao doc duoc ca hai - do 15 ca do bang
 rieng thang 2024-01 da co 140.162 dong null o CA HAI cot, nen dung `IS NOT NULL` truoc khi group;
 chi tiet va ly do o muc "Hai dieu rut ra cho ai query raw_nyc_taxi" trong doan dau file do.
 
-B5: kho che o day: `1-warehouse/README.md` (muc 4 = cau hinh client, muc 6 = khi may doi IP/reboot,
-muc 9 = viec con treo). Mo lenh cua Nguoi 2: `docker compose ps` - neu container nao `Exited` thi
-`docker compose up -d` roi bao Nguoi 2, vi Derby se can `tools/Set-Host.ps1 -RebuildCatalog`.
+B5: kho che o day: `1-warehouse/README.md` (muc 3 = bat kho, muc 4 = cau hinh client, muc 6 = khi
+may doi IP/reboot, muc 9 = viec con treo). Nguoi 2 bat kho bang nut play cua Docker Desktop (stack
+`nyc-warehouse`) hoac `docker compose up -d`, roi kiem tra `docker compose ps`: ca 4 phai
+`Up ... (healthy)`. Neu metastore o trang thai `Restarting` thi do loi `IS_RESUME` (log ghi
+`FUNCTION 'NUCLEUS_ASCII' already exists`), chua bang `docker compose up -d metastore` - **khong**
+chay `schematool` thu cong vi Derby chi mot JVM mo duoc. Neu IP may Nguoi 2 doi thi phai
+`tools/Set-Host.ps1 -RebuildCatalog` va dang ky lai bang, luc do moi thu tu lenh nam o muc 6 README.

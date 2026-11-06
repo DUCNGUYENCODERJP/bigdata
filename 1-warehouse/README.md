@@ -56,6 +56,24 @@ Remove-Item Env:IS_RESUME      # de luon dung che do resume tu day tro di
 Luu y: `IS_RESUME=false docker compose up ...` chi chay trong Git Bash. Trong PowerShell
 phai dung `$env:` nhu tren, con khong bi loi "The term 'IS_RESUME=false' is not recognized".
 
+**Bật bằng nút play của Docker Desktop (stack `nyc-warehouse`) có đủ không?** Đủ, **từ 05/11/2026**,
+nhưng không đủ ở ngày 05/11 trước khi sửa. Nguyên nhân đo được: nut play chi la `docker start`,
+**khong recreate**, mà env `IS_RESUME` bị bake vào container lúc `up`. Container metastore sinh ra
+từ một lần `-RebuildCatalog` mang `IS_RESUME=false` vĩnh viễn, nên mỗi lần start lại chạy
+`schematool -initSchema` trên Derby đã có schema →
+`Error: FUNCTION 'NUCLEUS_ASCII' already exists. (state=X0Y68,code=30000)` → `exit 1` →
+`Restarting (1)`, **RestartCount = 13**. Hai việc đã làm để đóng chuyện:
+`docker compose up -d metastore` (recreate với `IS_RESUME=true`, healthy trở lại trong ~20 s,
+`verify_access.py` chạy lại và **PASS** 1.506.791.871 dòng), và `Set-Host.ps1 -RebuildCatalog`
+giờ **tự recreate lại bằng `IS_RESUME=true` sau khi chờ healthy** — nên không còn để lại quả
+bom cho lần start tới.
+
+Tóm lại khi cần bật kho cho người khác dùng, thứ tự an toàn là:
+`docker compose up -d` → `docker compose ps` (cả 4 healthy) → `src/verify_access.py` (in `PASS`).
+Nếu `ps` báo metastore `Restarting`, đọc `docker logs nyc-metastore`; đúng chuỗi `NUCLEUS_ASCII`
+thì chữa bằng `docker compose up -d metastore`, **không** chạy `schematool` thủ công (Derby chỉ
+một JVM mở được).
+
 Chép dữ liệu sạch lên HDFS (nguyên byte, có resume — chạy lại chỉ chép file thiếu):
 
 ```powershell
@@ -327,6 +345,10 @@ và chạy `docker compose up -d` trước khi Người 3 làm việc (xem mục
 - **`IS_RESUME` bị baked vào container lúc `up`.** Nếu lần trước chạy `IS_RESUME=false` rồi lần
   sau chỉ `docker compose restart metastore`, schematool chạy lại trên DB đã có schema và fail
   `FUNCTION 'NUCLEUS_ASCII' already exists`. Dùng `up -d` (nó recreate) thay vì `restart`.
+  **Mở rộng 2026-11-05:** cùng bẫy đó nhưng qua ngả GUI — nút play của Docker Desktop là
+  `docker start`, cũng không recreate, nên một container sinh ra từ lần `-RebuildCatalog` cứ
+  crash-loop mãi (`RestartCount 13`) dù `docker-compose.yml` đã default `IS_RESUME=true`.
+  `Set-Host.ps1 -RebuildCatalog` từ hôm đó luôn recreate lại bằng `IS_RESUME=true`.
 - **Docker Desktop trên máy này tự tắt engine** (containers `Exited (255)`, pipe
   `dockerDesktopLinuxEngine` mất). Cách hồi phục: khởi động lại Docker Desktop, chờ
   `docker info` thành công, rồi `docker compose up -d`. Dữ liệu trên volume không mất.

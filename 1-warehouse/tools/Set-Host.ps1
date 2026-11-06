@@ -97,6 +97,27 @@ try {
     $env:IS_RESUME = "false"
     docker compose up -d metastore | Out-Null
     Remove-Item Env:IS_RESUME -ErrorAction SilentlyContinue
+
+    # IS_RESUME duoc BAKE vao container luc `up`, va nut play cua Docker Desktop chi
+    # `docker start` (khong recreate). De lai container mang IS_RESUME=false thi moi lan
+    # tat/bat machine la schematool chay lai tren DB da co schema:
+    # "FUNCTION 'NUCLEUS_ASCII' already exists" -> thoat(1) -> crash-loop (do 05/11:
+    # RestartCount = 13). Doi khi schema xong da phai recreate bang IS_RESUME=true;
+    # phai cho healthy truoc, neu khong schema se chua kip tao.
+    Write-Host "[catalog] cho schematool tao schema xong (toi da 180s)..."
+    $deadline = (Get-Date).AddSeconds(180)
+    $healthy = $false
+    while ((Get-Date) -lt $deadline) {
+      $st = docker inspect -f "{{.State.Health.Status}}" nyc-metastore 2>$null
+      if ($st -eq "healthy") { $healthy = $true; break }
+      Start-Sleep -Seconds 10
+    }
+    if (-not $healthy) { throw "Metastore van chua healthy sau 180s (cuoi cung: '$st'). Xem docker logs nyc-metastore." }
+
+    Write-Host "[catalog] recreate metastore voi IS_RESUME=true de nut play cua Docker Desktop an toan..."
+    $env:IS_RESUME = "true"
+    docker compose up -d metastore | Out-Null
+    Remove-Item Env:IS_RESUME -ErrorAction SilentlyContinue
   } else {
     # IS_RESUME duoi vao env cua container luc `up`, nen dung `restart` sau mot lan
     # rebuild (IS_RESUME=false) se khien schematool chay lai tren DB da co schema:
