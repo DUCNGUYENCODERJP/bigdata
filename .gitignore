@@ -26,3 +26,7 @@ custom_hosts
 # lenh javac ghi trong 1-warehouse/README.md muc 3.
 *.class
 1-warehouse/tools/classes/
+
+# Output sinh ra khi chay pipeline (csv/json/zip/parquet), tai tao bang
+# 3-analytics/run_pipeline.ps1; dung file bang chung thi xem bao cao trong 3-analytics.
+3-analytics/artifacts/
