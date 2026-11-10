@@ -2,8 +2,6 @@
 # Chỉ có hiệu lực force khi tick "Require review from Code Owners"
 # ở Settings -> Branches -> rule của `main`.
 #
-# Còn thiếu username của Người 4: dòng cuoi trong file đang để comment.
-# Uncomment và điền là xong; đừng để placeholder @<...> vì GitHub báo "Invalid code owner".
 
 /1-warehouse/              @trinhvu56
 /2-processing/             @DUCNGUYENCODERJP
@@ -16,6 +14,3 @@
 /.github/                  @DUCNGUYENCODERJP
 /docs/                     @DUCNGUYENCODERJP
 /.gitignore                @DUCNGUYENCODERJP
-
-# TODO khi co username: bo dau # va thay @<...>
-#/4-bi/                     @<username-nguoi-4>

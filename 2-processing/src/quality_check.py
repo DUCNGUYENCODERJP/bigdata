@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
+from config_utils import load_project_config
 
 LOGGER = logging.getLogger("quality_check")
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
@@ -28,14 +28,17 @@ REQUIRED_COLUMNS = {
 
 def load_config(config_path: Path = CONFIG_PATH) -> dict[str, Any]:
     """Đọc cấu hình YAML của dự án."""
-    with config_path.open(encoding="utf-8") as config_file:
-        return yaml.safe_load(config_file)
+    return load_project_config(config_path)
 
 
 def set_runtime_environment(config: dict[str, Any]) -> None:
-    """Đưa Java và vùng tạm của Spark về các đường dẫn đã cấu hình trên ổ D."""
-    temp_dir = os.path.normpath("D:/tmp")
+    """Đưa Java và vùng tạm của Spark về các đường dẫn đã cấu hình."""
+    temp_dir = os.path.normpath(
+        str(config["paths"].get("temp_dir") or Path(config["paths"]["spark_local_dir"]).parent)
+    )
     spark_local_dirs = os.path.normpath(config["paths"]["spark_local_dir"])
+    Path(temp_dir).mkdir(parents=True, exist_ok=True)
+    Path(spark_local_dirs).mkdir(parents=True, exist_ok=True)
     os.environ["TMP"] = temp_dir
     os.environ["TEMP"] = temp_dir
     os.environ["SPARK_LOCAL_DIRS"] = spark_local_dirs
@@ -251,7 +254,7 @@ def run_quality_check(month: str, config: dict[str, Any]) -> Path:
         report_path = Path(paths["reports_dir"]) / f"quality_{month}.md"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(report, encoding="utf-8")
-        print(report)
+        logging.info(report)
         LOGGER.info("Đã ghi báo cáo: %s", report_path)
         return report_path
     finally:

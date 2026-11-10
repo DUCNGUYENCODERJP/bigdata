@@ -14,7 +14,7 @@ Raw của TLC **đổi kiểu giữa các năm**: `PULocationID` là INT32 ở 4
 INT64 ở 145 tháng sau, `RatecodeID`/`passenger_count` là INT64 rồi DOUBLE. Spark từ
 chối hợp nhất hai loại sau (`CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE`), nên schema của
 bảng phải tự dựng từ manifest footer của mảnh 2 theo quy tắc rộng nhất, có đo
-xác nhận trên cluster này (`tools/probe_type_promotion.py`):
+xác nhận bằng các lần đọc thử trực tiếp trên cluster:
 
 | Khai báo trong DDL | File Parquet thật | Đọc được? |
 |---|---|---|
@@ -45,13 +45,16 @@ Chạy (Python là bản trong .venv của mảnh 2, JDK 17, HADOOP_HOME=D:\\had
 """
 
 from __future__ import annotations
+import logging
 
 import argparse
 import collections
 import csv
 import os
 import sys
+import tempfile
 import time
+from pathlib import Path
 
 from pyspark.sql import SparkSession
 
@@ -61,11 +64,11 @@ EXPECTED_PARTITIONS = 188
 # Mốc của mảnh 2: dòng raw theo footer Parquet cua 188 thang
 # (2-processing/reports/warehouse_summary.md, muc "Raw theo manifest").
 EXPECTED_ROWS = 1_516_766_780
-DEFAULT_MANIFEST = "D:/BIGDATA/2-processing/reports/source_manifest.csv"
+DEFAULT_MANIFEST = Path(__file__).resolve().parents[2] / "2-processing" / "reports" / "source_manifest.csv"
 # Bon thang cuoi nam 2026 chua tai ve khi lap manifest.
 LAST_MONTH = (2026, 8)
-SPARK_LOCAL_DIR = os.environ.get("SPARK_LOCAL_DIR", "D:/tmp/spark")
-HADOOP_HOME = os.environ.get("HADOOP_HOME", "D:/hadoop").replace("\\", "/")
+SPARK_LOCAL_DIR = os.environ.get("SPARK_LOCAL_DIR", str(Path(tempfile.gettempdir()) / "nyc-taxi-spark"))
+HADOOP_HOME = os.environ.get("HADOOP_HOME", "C:/hadoop").replace("\\", "/")
 
 # Kieu vat ly Parquet -> kieu Spark, dung cho truong hop khong doi duoc.
 PHYSICAL_TO_SPARK = {"BYTE_ARRAY": "string", "BOOLEAN": "boolean", "INT32": "int",
@@ -189,9 +192,9 @@ def registered_location(spark: SparkSession, qualified: str) -> str | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=f"Tạo bảng Hive {TABLE_NAME} trên HDFS.")
-    parser.add_argument("--host", default=os.environ.get("WAREHOUSE_HOST", "192.168.100.19"),
+    parser.add_argument("--host", default=os.environ.get("WAREHOUSE_HOST", "192.168.100.17"),
                         help="IP thật của máy chạy cluster (nơi 8020/9083 mở ra host).")
-    parser.add_argument("--manifest", default=DEFAULT_MANIFEST,
+    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST,
                         help="source_manifest.csv của mảnh 2 — nguồn schema union, không mở file Parquet.")
     parser.add_argument("--skip-count", action="store_true",
                         help="Chỉ đăng ký + đối chiếu partition, không đếm dòng toàn bảng.")
@@ -203,25 +206,25 @@ def main() -> int:
     qualified = f"`{args.database}`.`{TABLE_NAME}`"
     started = time.monotonic()
 
-    types, spellings, months_count, manifest_rows = read_column_types(args.manifest.replace("/", os.sep))
-    print(f"[manifest] {months_count} thang, {manifest_rows:,} dong raw tong hop duoc tu footer")
+    types, spellings, months_count, manifest_rows = read_column_types(str(args.manifest))
+    logging.info(f"[manifest] {months_count} thang, {manifest_rows:,} dong raw tong hop duoc tu footer")
     if months_count != EXPECTED_PARTITIONS:
-        print(f"[FAIL] manifest chi co {months_count}/{EXPECTED_PARTITIONS} thang trong pham vi")
+        logging.error(f"[FAIL] manifest chi co {months_count}/{EXPECTED_PARTITIONS} thang trong pham vi")
         return 1
 
     columns, dropped = build_schema(types, spellings)
-    print(f"[schema]   {len(columns)} cột đưa vào bảng: "
+    logging.info(f"[schema]   {len(columns)} cột đưa vào bảng: "
           + ", ".join(f"{n}:{t}" for n, t in columns))
     if dropped:
-        print(f"[schema]   BO {len(dropped)} cot vi kieu doi giua cac nam, khong co kieu nao doc "
+        logging.info(f"[schema]   BO {len(dropped)} cot vi kieu doi giua cac nam, khong co kieu nao doc "
               f"duoc ca hai phia: {dropped}")
 
     spark = build_spark(args.host)
     old = registered_location(spark, qualified)
     if old and not old.startswith(hdfs_uri):
-        print(f"[FAIL] {qualified} đã tồn tại và trỏ tới {old} — không phải cluster {hdfs_uri}.")
-        print("       Máy vừa đổi IP; location bị ghi chết trong catalog Derby. Hồi phục:")
-        print(r"         .\tools\Set-Host.ps1 -RebuildCatalog    # roi chay lai script nay")
+        logging.error(f"[FAIL] {qualified} đã tồn tại và trỏ tới {old} — không phải cluster {hdfs_uri}.")
+        logging.info("       Máy vừa đổi IP; location bị ghi chết trong catalog Derby. Hồi phục:")
+        logging.info(r"         .\tools\Set-Host.ps1 -RebuildCatalog    # roi chay lai script nay")
         return 1
 
     column_ddl = ", ".join(f"`{name}` {spark_type}" for name, spark_type in columns)
@@ -243,20 +246,20 @@ def main() -> int:
     props = spark.sql(f"DESCRIBE FORMATTED {qualified}").collect()
     table_location = [r[1] for r in props if r[0] == "Location"][0]
 
-    print(f"[table]    {qualified}")
-    print(f"[location] {table_location}")
-    print(f"[columns]  {len(registered)} cột đăng ký")
+    logging.info(f"[table]    {qualified}")
+    logging.info(f"[location] {table_location}")
+    logging.info(f"[columns]  {len(registered)} cột đăng ký")
 
     if partition_count != EXPECTED_PARTITIONS:
-        print(f"[FAIL] partition = {partition_count}/{EXPECTED_PARTITIONS} -> cây raw trên HDFS còn thiếu")
+        logging.error(f"[FAIL] partition = {partition_count}/{EXPECTED_PARTITIONS} -> cây raw trên HDFS còn thiếu")
         return 1
     if not table_location.startswith(hdfs_uri):
-        print(f"[FAIL] Location không nằm trên HDFS của cluster này: {table_location}")
+        logging.error(f"[FAIL] Location không nằm trên HDFS của cluster này: {table_location}")
         return 1
-    print(f"[partitions] {partition_count}/{EXPECTED_PARTITIONS} -> OK  ({time.monotonic() - started:.0f} s)")
+    logging.info(f"[partitions] {partition_count}/{EXPECTED_PARTITIONS} -> OK  ({time.monotonic() - started:.0f} s)")
 
     sample = spark.sql(f"SELECT count(*) AS n FROM {qualified} WHERE year = 2024 AND month = 1").collect()[0]["n"]
-    print(f"[count] 2024-01 = {sample:,}  (mảnh 2 đo raw tháng này là 2.964.624)")
+    logging.info(f"[count] 2024-01 = {sample:,}  (mảnh 2 đo raw tháng này là 2.964.624)")
 
     # Nam duoi day moi la bang chung that: mot scan toan bang buoc Spark doc TRA 188
     # file Parquet bang dung schema khai bao. Chi can mot partition lech kieu la ca
@@ -269,20 +272,21 @@ def main() -> int:
                 FROM {qualified}"""
         ).collect()[0]
         total = int(probe["n"])
-        print(f"[scan] 188 partition doc hết: {probe['lo']} .. {probe['hi']}, "
+        logging.info(f"[scan] 188 partition doc hết: {probe['lo']} .. {probe['hi']}, "
               f"PULocationID khong null = {probe['co_id']:,}, fare_amount<0 = {probe['am']:,}")
         if probe["co_id"] != manifest_rows:
-            print(f"[WARN] số dòng có PULocationID ({probe['co_id']:,}) khác tổng raw trong manifest "
+            logging.warning(f"[WARN] số dòng có PULocationID ({probe['co_id']:,}) khác tổng raw trong manifest "
                   f"({manifest_rows:,}) — manifest tính cả dòng thiếu zone id, đây là bình thường")
-        print(f"[count] toàn bảng = {total:,}  mốc raw của mảnh 2 là {EXPECTED_ROWS:,}")
+        logging.info(f"[count] toàn bảng = {total:,}  mốc raw của mảnh 2 là {EXPECTED_ROWS:,}")
         if total != EXPECTED_ROWS:
-            print(f"[FAIL] lệch {total - EXPECTED_ROWS:+,} dòng so với warehouse_summary.md")
+            logging.error(f"[FAIL] lệch {total - EXPECTED_ROWS:+,} dòng so với warehouse_summary.md")
             return 1
 
-    print(f"[done] {time.monotonic() - started:.0f} s")
+    logging.info(f"[done] {time.monotonic() - started:.0f} s")
     spark.stop()
     return 0
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     sys.exit(main())

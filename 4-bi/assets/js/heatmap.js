@@ -1,52 +1,97 @@
 /**
- * heatmap.js
- * ----------
- * Thuật toán tạo Ma trận nhiệt Nhu cầu đi xe (24 Giờ x 7 Ngày trong tuần).
- * Quy ước Spark: 1 = Chủ Nhật, ..., 7 = Thứ Bảy.
+ * ==============================================================================
+ * HEATMAP.JS — THUẬT TOÁN MA TRẬN NHIỆT MẬT ĐỘ NHU CẦU 24 GIỜ × 7 NGÀY
+ * ==============================================================================
  */
 
 document.addEventListener("DOMContentLoaded", () => {
   renderHeatmap();
 });
 
-function renderHeatmap() {
-  const heatmapWrapper = document.getElementById('heatmapWrapper');
-  if (!heatmapWrapper) return;
+/* ==============================================================================
+ * HÀM RENDER MA TRẬN NHIỆT (RENDER HEATMAP TABLE)
+ * ============================================================================== */
+window.renderHeatmap = function() {
+  const container = document.getElementById('heatmapWrapper');
+  if (!container) return;
 
-  const dayNames = [
-    'Chủ Nhật (1)', 'Thứ Hai (2)', 'Thứ Ba (3)',
-    'Thứ Tư (4)', 'Thứ Năm (5)', 'Thứ Sáu (6)', 'Thứ Bảy (7)'
-  ];
+  const data = window.NYC_DATA || window.NYC_CURRENT_DATA || window.NYC_REAL_DATA;
+  const matrix = data && data.heatmap ? data.heatmap : null;
 
-  let tableHtml = '<table class="heatmap-table"><thead><tr><th>Thứ / Giờ</th>';
-  for (let h = 0; h < 24; h++) {
-    tableHtml += `<th>${h}h</th>`;
+  if (!matrix) {
+    container.innerHTML = `
+      <div style="padding: 32px; text-align: center; color: var(--text-muted); font-size: 13.5px;">
+        ⏳ Đang kết nối cơ sở dữ liệu Hive SQL và tổng hợp ma trận nhiệt...
+      </div>
+    `;
+    return;
   }
-  tableHtml += '</tr></thead><tbody>';
 
-  const baseH = [
-    32, 21, 14, 9, 8, 12, 31, 68, 95, 88, 76, 78,
-    82, 84, 86, 89, 92, 115, 122, 118, 105, 94, 78, 52
+  // Sắp xếp theo tuần làm việc: Thứ Hai -> Chủ Nhật
+  // Quy ước Spark DAYOFWEEK: 1 = Chủ Nhật, 2 = Thứ Hai, ..., 7 = Thứ Bảy
+  const daysConfig = [
+    { name: 'Thứ Hai', sparkIdx: 1 },
+    { name: 'Thứ Ba', sparkIdx: 2 },
+    { name: 'Thứ Tư', sparkIdx: 3 },
+    { name: 'Thứ Năm', sparkIdx: 4 },
+    { name: 'Thứ Sáu', sparkIdx: 5 },
+    { name: 'Thứ Bảy', sparkIdx: 6 },
+    { name: 'Chủ Nhật', sparkIdx: 0 }
   ];
-  const dayMult = [0.85, 0.95, 1.0, 1.05, 1.15, 1.30, 1.10];
 
-  dayNames.forEach((dName, dIdx) => {
-    tableHtml += `<tr><td style="text-align: left; font-weight: 600; color: #cbd5e1; background: #1e293b;">${dName}</td>`;
+  // 1. Tìm giá trị lớn nhất trong toàn bộ ma trận để chuẩn hóa thang màu
+  let maxVal = 1;
+  for (let d = 0; d < 7; d++) {
     for (let h = 0; h < 24; h++) {
-      let val = Math.round(baseH[h] * dayMult[dIdx] * (0.95 + 0.1 * Math.sin(h)));
-      if ((dIdx === 5 || dIdx === 6) && (h >= 21 || h <= 2)) val = Math.round(val * 1.35);
-      if (dIdx === 0 && h >= 5 && h <= 9) val = Math.round(val * 0.65);
-
-      // Thang màu mật độ (Color scale)
-      let intensity = Math.min(1, Math.max(0, (val - 8) / 150));
-      let bg = `rgba(59, 130, 246, ${0.15 + intensity * 0.85})`;
-      if (intensity > 0.75) bg = `rgba(239, 68, 68, ${0.7 + intensity * 0.3})`;
-      else if (intensity > 0.5) bg = `rgba(245, 158, 11, ${0.6 + intensity * 0.4})`;
-
-      tableHtml += `<td class="heat-cell" style="background: ${bg}; color: #fff;" title="${dName} lúc ${h}h: ${val * 1000} chuyến">${val}k</td>`;
+      if (matrix[d] && matrix[d][h] > maxVal) {
+        maxVal = matrix[d][h];
+      }
     }
-    tableHtml += '</tr>';
+  }
+
+  // 2. Tạo tiêu đề các cột: 24 khung giờ
+  let html = '<table class="heatmap-table"><thead><tr><th style="min-width: 90px; text-align: left; padding-left: 10px;">Thứ / Giờ</th>';
+  for (let h = 0; h < 24; h++) {
+    html += `<th>${h}h</th>`;
+  }
+  html += '</tr></thead><tbody>';
+
+  // 3. Render từng hàng thứ và 24 ô giờ
+  daysConfig.forEach(day => {
+    html += `<tr><td class="day-label">${day.name}</td>`;
+    const rowData = matrix[day.sparkIdx] || [];
+
+    for (let h = 0; h < 24; h++) {
+      const val = rowData[h] || 0;
+      const intensity = Math.min(1, Math.max(0, val / maxVal));
+
+      // Thang màu trực quan:
+      // Xanh dương nhẹ -> Hổ phách -> Đỏ san hô rực rỡ lúc cao điểm
+      let bg = `rgba(56, 189, 248, ${0.12 + intensity * 0.75})`;
+      let textColor = '#cbd5e1';
+
+      if (intensity > 0.7) {
+        bg = `rgba(244, 63, 94, ${0.7 + intensity * 0.3})`;
+        textColor = '#ffffff';
+      } else if (intensity > 0.4) {
+        bg = `rgba(245, 158, 11, ${0.6 + intensity * 0.4})`;
+        textColor = '#ffffff';
+      }
+
+      // Rút gọn hiển thị dạng 12.5k
+      const displayVal = val >= 1000 ? `${(val / 1000).toFixed(1)}k` : `${val}`;
+
+      html += `
+        <td class="heatmap-cell"
+            style="background: ${bg}; color: ${textColor};"
+            title="${day.name} lúc ${h}h00: ${Number(val).toLocaleString('vi-VN')} chuyến (${(intensity * 100).toFixed(0)}% tải đỉnh)">
+          ${displayVal}
+        </td>
+      `;
+    }
+    html += '</tr>';
   });
-  tableHtml += '</tbody></table>';
-  heatmapWrapper.innerHTML = tableHtml;
-}
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+};

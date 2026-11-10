@@ -71,7 +71,6 @@ services:
         condition: service_started
     ports:
       - "9083:9083"    # Hive Metastore Thrift -> Spark enableHiveSupport()
-      - "10000:10000"  # HiveServer2/beeline - chi dung khi bat SERVICE_NAME=hiveserver2
     environment:
       # /entrypoint.sh cua anh nay: moi file trong HIVE_CUSTOM_CONF_DIR duoc
       # `ln -sfn` vao $HIVE_CONF_DIR, va HADOOP_CONF_DIR cung tro ve do. Vi vay
@@ -95,6 +94,21 @@ services:
       timeout: 10s
       retries: 20
       start_period: 60s
+
+  hiveserver2:
+    image: apache/hive:3.1.3
+    container_name: nyc-hiveserver2
+    hostname: hiveserver2
+    depends_on:
+      metastore:
+        condition: service_healthy
+    ports:
+      - "10000:10000"  # HiveServer2 -> Hive ODBC / Power BI
+    environment:
+      HIVE_CUSTOM_CONF_DIR: /opt/hive/custom-conf
+      SERVICE_NAME: hiveserver2
+    volumes:
+      - ./config:/opt/hive/custom-conf:ro
 
   # Container phu tro: chay lenh hdfs (dfsadmin -report, dfs -count, mkdir) ma khong
   # can cau Hadoop tren may Windows. Giu song bang sleep, vao qua docker exec.

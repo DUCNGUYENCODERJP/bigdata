@@ -15,16 +15,35 @@
     # Tắt ngủ khi cắm AC trong lúc batch chạy (giá trị cũ được ghi vào transcript để khôi phục).
     [switch]$KeepAwake,
 
-    # JDK 17 và vùng tạm là machine-specific; đổi tham số khi máy khác không có sẵn D:\tmp.
-    [string]$JavaHome = 'C:\Program Files\Eclipse Adoptium\jdk-17.0.15.6-hotspot',
+    [string]$JavaHome = 'C:\Program Files\Java\jdk-17',
 
-    [string]$TempDir = 'D:\tmp'
+    [string]$TempDir = (Join-Path (Split-Path -Parent $PSScriptRoot) 'data\tmp'),
+
+    [string]$PythonPath = ''
 )
 
 $ErrorActionPreference = 'Stop'
 # Lấy thư mục dự án từ vị trí script để người khác clone về là chạy được, không phải sửa lệnh.
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$Python = Join-Path $ProjectRoot '.venv\Scripts\python.exe'
+$RepositoryRoot = Split-Path -Parent $ProjectRoot
+$PythonCandidates = @(
+    $PythonPath,
+    $env:NYC_TAXI_PYTHON,
+    (Join-Path $ProjectRoot '.venv\Scripts\python.exe'),
+    (Join-Path $RepositoryRoot '.venv\Scripts\python.exe'),
+    (Join-Path $RepositoryRoot '3-analytics\.venv\Scripts\python.exe')
+)
+$PythonCommand = Get-Command python.exe -ErrorAction SilentlyContinue
+if ($PythonCommand) { $PythonCandidates += $PythonCommand.Source }
+$Python = $null
+foreach ($Candidate in ($PythonCandidates | Select-Object -Unique)) {
+    if (-not $Candidate -or -not (Test-Path -LiteralPath $Candidate -PathType Leaf)) { continue }
+    & $Candidate -c 'import pyspark, yaml, requests' 2>$null
+    if ($LASTEXITCODE -eq 0) {
+        $Python = $Candidate
+        break
+    }
+}
 $Runner = Join-Path $ProjectRoot 'src\batch_runner.py'
 $ReportsDir = Join-Path $ProjectRoot 'reports'
 $Stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
@@ -33,7 +52,7 @@ $TranscriptPath = Join-Path $ReportsDir ("transcript_{0}_{1}_{2}.txt" -f $From, 
 # Console UTF-8 để tiếng Việt của script và log Python không bị vỡ dấu.
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
-# Java 17 (bắt buộc, máy còn Java 25 trong PATH) và vùng tạm luôn trên ổ D:.
+# Java 17 (bắt buộc, máy còn Java 25 trong PATH) và vùng tạm theo cấu hình dự án.
 $env:JAVA_HOME = $JavaHome
 $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
 $env:TMP = $TempDir
@@ -94,9 +113,9 @@ $RunnerExitCode = 1
 Push-Location $ProjectRoot
 try {
     if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) {
-        throw "Python interpreter not found: $Python"
+        throw "Python interpreter not found. Pass -PythonPath or set NYC_TAXI_PYTHON to a Python environment with the processing requirements."
     }
-    if (-not (Test-Path -LiteralPath $env:JAVA_HOME -PathType Container)) {
+    if (-not (Test-Path -LiteralPath (Join-Path $env:JAVA_HOME 'bin\java.exe') -PathType Leaf)) {
         throw "JAVA_HOME not found: $env:JAVA_HOME (Spark cần JDK 17, không dùng Java 25)"
     }
 

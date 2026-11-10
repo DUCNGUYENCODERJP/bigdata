@@ -70,15 +70,21 @@ Chay:
     $env:JAVA_HOME = "C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.15.6-hotspot"
     $env:HADOOP_HOME = "D:\\hadoop"
     D:\\BIGDATA\\2-processing\\.venv\\Scripts\\python.exe `
-        tools/probe_type_promotion.py --host 192.168.100.19
+        tools/probe_type_promotion.py
 """
 
 from __future__ import annotations
 
 import argparse
 import os
+import sys
 
 from pyspark.sql import SparkSession
+
+# warehouse_host.py o ben thu muc src/, script nay o tools/: them src/ vao duong dan
+# tim module de lenh chay duoc tu bat cu thu muc nao.
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
+from warehouse_host import resolve_host  # noqa: E402
 
 RAW = "/data/nyc_taxi/raw/trips"
 # Duong dan partition theo thang da chon o tren; ten bien ghi theo kieu vat ly THAT
@@ -118,8 +124,10 @@ def try_read(spark: SparkSession, label: str, path: str, schema: str, exprs: str
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", default=os.environ.get("WAREHOUSE_HOST", "192.168.100.19"))
+    parser.add_argument("--host", default=None,
+                        help="IP may chay cluster; thieu thi tu phat hien (warehouse_host.py).")
     args = parser.parse_args()
+    args.host = resolve_host(args.host)
     spark = build_spark(args.host)
 
     # (1) INT64/INT32 co cung doc duoc bang bigint khong — day la kha nang duy nhat

@@ -12,10 +12,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-import yaml
 from pyspark.sql import SparkSession, functions as F
 
 from clean import clean, effective_max_drop_rate
+from config_utils import load_project_config
 from quality_check import set_runtime_environment
 from output_validation import read_local_month_partition, verify_clean_partition
 from raw_schema import PIPELINE_RAW_COLUMNS, raw_columns_ignored, standardize_raw_schema
@@ -39,8 +39,7 @@ class DropRateExceeded(RuntimeError):
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
-    with path.open(encoding="utf-8") as config_file:
-        return yaml.safe_load(config_file)
+    return load_project_config(path)
 
 
 def create_spark(config: dict[str, Any]) -> SparkSession:

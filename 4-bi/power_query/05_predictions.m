@@ -1,6 +1,9 @@
-// Bảng: predictions (Parquet)
+// Full-period held-out predictions aggregated by zone and hour.
 let
-    Source = Parquet.Document(File.Contents("D:\Captone Project\4-bi\data\predictions.parquet")),
-    ChangeType = Table.TransformColumnTypes(Source,{{"date", type date}, {"PULocationID", Int64.Type}, {"pickup_hour", Int64.Type}, {"day_of_week", Int64.Type}, {"label", type number}, {"baseline_prediction", type number}, {"gbt_prediction", type number}})
+    Source = full_history_workbook{[Item = "predictions", Kind = "Table"]}[Data],
+    ChangeType = Table.TransformColumnTypes(
+        Source,
+        {{"PULocationID", Int64.Type}, {"pickup_hour", Int64.Type}, {"actual_test_trips", Int64.Type}, {"baseline_prediction", type number}, {"gbt_prediction", type number}, {"test_slots", Int64.Type}}
+    )
 in
     ChangeType

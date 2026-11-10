@@ -7,14 +7,14 @@
 188 tháng Yellow Taxi TLC **2011-01 → 2026-08** đã tải, chuẩn hoá, làm sạch bằng PySpark và ghi Parquet phân vùng `year=/month=`:
 
 - **1.506.791.871 dòng**, 33,59 GiB, **188/188 partition**, **0 lệch schema**, **0 dòng vi phạm** sau kiểm tra
-- Chỉ loại **0,658%** dòng; **34/34 test** xanh
+- Chỉ loại **0,658%** dòng
 - **25 cột**: 23 cột vật lý + `year`/`month` — khai báo đầy đủ ở `docs/schema.md`
 
 ## Giao những gì
 
 | | |
 |---|---|
-| Code + test | `src/`, `tests/`, `config.yaml`, `scripts/run_batch.ps1` |
+| Code xử lý | `src/`, `config.yaml`, `scripts/run_batch.ps1` |
 | Tài liệu | `docs/schema.md`, `docs/handover.md` (chi tiết kỹ thuật) |
 | Bằng chứng | `reports/warehouse_summary.md`, `reports/run_log.csv`, `reports/source_manifest.csv` |
 | Dữ liệu 33 GB | **vẫn ở máy Người 2**, chưa lên hệ thống chung — xem mục dưới |

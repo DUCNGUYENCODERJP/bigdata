@@ -44,8 +44,7 @@ def transform(df: DataFrame, zones_df: DataFrame, cfg: dict[str, Any] | None = N
         raise ValueError("Zone lookup không chứa LocationID hợp lệ nào")
 
     result = df
-    # is_distance_missing do clean sinh ra; khi transform chạy độc lập (unit test)
-    # thì suy lại từ trip_distance gốc = 0 để giữ cùng ngữ nghĩa.
+    # Khi transform chạy độc lập, suy cờ này từ trip_distance = 0 để giữ cùng ngữ nghĩa.
     if "is_distance_missing" not in result.columns:
         result = result.withColumn(
             "is_distance_missing",

@@ -7,18 +7,26 @@ RMSE_Improvement_Pct =
 VAR BaseRMSE = CALCULATE(MAX('metrics'[rmse]), 'metrics'[model] = "zone_hour_mean_baseline")
 VAR GbtRMSE = CALCULATE(MAX('metrics'[rmse]), 'metrics'[model] = "gbt_regressor")
 RETURN
-IF(BaseRMSE > 0, (BaseRMSE - GbtRMSE) / BaseRMSE, 0)
+IF(BaseRMSE > 0 && NOT ISBLANK(GbtRMSE), (BaseRMSE - GbtRMSE) / BaseRMSE, BLANK())
 
 // 2. Tỷ lệ cải thiện MAE của GBT so với Baseline:
 MAE_Improvement_Pct = 
 VAR BaseMAE = CALCULATE(MAX('metrics'[mae]), 'metrics'[model] = "zone_hour_mean_baseline")
 VAR GbtMAE = CALCULATE(MAX('metrics'[mae]), 'metrics'[model] = "gbt_regressor")
 RETURN
-IF(BaseMAE > 0, (BaseMAE - GbtMAE) / BaseMAE, 0)
+IF(BaseMAE > 0 && NOT ISBLANK(GbtMAE), (BaseMAE - GbtMAE) / BaseMAE, BLANK())
 
 // 3. Tỷ lệ cải thiện MAPE của GBT so với Baseline:
 MAPE_Improvement_Pct = 
 VAR BaseMAPE = CALCULATE(MAX('metrics'[mape]), 'metrics'[model] = "zone_hour_mean_baseline")
 VAR GbtMAPE = CALCULATE(MAX('metrics'[mape]), 'metrics'[model] = "gbt_regressor")
 RETURN
-IF(BaseMAPE > 0, (BaseMAPE - GbtMAPE) / BaseMAPE, 0)
+IF(BaseMAPE > 0 && NOT ISBLANK(GbtMAPE), (BaseMAPE - GbtMAPE) / BaseMAPE, BLANK())
+
+// 4. Giá trị gốc để hiển thị thẻ so sánh hai mô hình.
+Baseline_RMSE = CALCULATE(MAX('metrics'[rmse]), 'metrics'[model] = "zone_hour_mean_baseline")
+GBT_RMSE = CALCULATE(MAX('metrics'[rmse]), 'metrics'[model] = "gbt_regressor")
+Baseline_MAE = CALCULATE(MAX('metrics'[mae]), 'metrics'[model] = "zone_hour_mean_baseline")
+GBT_MAE = CALCULATE(MAX('metrics'[mae]), 'metrics'[model] = "gbt_regressor")
+Baseline_MAPE = CALCULATE(MAX('metrics'[mape]), 'metrics'[model] = "zone_hour_mean_baseline")
+GBT_MAPE = CALCULATE(MAX('metrics'[mape]), 'metrics'[model] = "gbt_regressor")

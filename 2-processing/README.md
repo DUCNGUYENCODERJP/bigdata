@@ -1,25 +1,27 @@
 # NYC TLC Yellow Taxi - Data Processing
 
-Phần xử lý dùng PySpark local để kiểm tra, làm sạch Yellow Taxi Parquet, chuẩn hóa taxi zone và ghi Parquet phân vùng. Các đường dẫn raw, clean, reports và Spark local nằm trong `config.yaml` và là đường dẫn tuyệt đối mang tính máy — người nhận sửa 6 mục `paths:`/`hadoop_home` theo máy của mình. Bản bàn giao cho nhóm (kết quả nghiệm thu, cách tái tạo, lưu ý cho từng người) ở [docs/handover.md](docs/handover.md).
+Phần xử lý dùng PySpark local để kiểm tra, làm sạch Yellow Taxi Parquet, chuẩn hóa taxi zone và ghi Parquet phân vùng. Các đường dẫn trong `config.yaml` được tính tương đối từ file cấu hình nên có thể chạy từ checkout hiện tại. Chỉ đổi `hadoop_home` và `runtime.java_home` khi JDK 17 hoặc Hadoop Windows binaries nằm ở vị trí khác. Bản bàn giao cho nhóm (kết quả nghiệm thu, cách tái tạo, lưu ý cho từng người) ở [docs/handover.md](docs/handover.md).
 
 ## Môi trường
 
 - Python 3.9 trở lên
-- Java 17 hoặc 21 (đã kiểm chứng với Java 17)
+- JDK 17 (đã kiểm chứng với Java 17)
 - PySpark 4.0.1, khai trong `requirements.txt`
 
 Trong PowerShell, đặt JDK 17 trước khi chạy Spark (`scripts/run_batch.ps1` tự làm việc này, nhận `-JavaHome` và `-TempDir` để đổi đường dẫn):
 
 ```powershell
-$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-17.0.15.6-hotspot"
+$env:JAVA_HOME = "C:\Program Files\Java\jdk-17"
 $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
-$env:TMP = "D:\tmp"
-$env:TEMP = "D:\tmp"
+$env:TMP = "data\tmp"
+$env:TEMP = "data\tmp"
 ```
 
-Interpreter dùng cho dự án là Python của `.venv` tạo từ `requirements.txt`:
+Tạo environment Python cho phần processing từ `requirements.txt`:
 
 ```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe
 ```
 
@@ -65,11 +67,12 @@ Sink mặc định `local` ghi Parquet vào `paths.clean_dir/trips`, phân vùng
 .\.venv\Scripts\python.exe src\batch_runner.py --from 2011-01 --to 2026-08 --force --dry-run
 ```
 
-Wrapper PowerShell đặt JDK 17, vùng tạm, bật transcript và tắt ngủ khi cắm AC; đường dẫn dự án được suy ra từ vị trí script nên clone về máy nào cũng chạy:
+Wrapper PowerShell đặt JDK 17, vùng tạm, bật transcript và tắt ngủ khi cắm AC. Nếu Python environment không nằm ở vị trí mặc định, truyền `-PythonPath`:
 
 ```powershell
 Set-Location <repo>\2-processing
 .\scripts\run_batch.ps1 -From 2011-01 -To 2026-08 -Force -KeepAwake
+# Hoặc: .\scripts\run_batch.ps1 -From 2011-01 -To 2026-08 -PythonPath C:\path\to\python.exe
 ```
 
 Khi gián đoạn, chạy lại cùng lệnh nhưng bỏ `-Force`: runner sẽ postcheck các partition đã có và chỉ xử lý tháng chưa xong. Exit code 1 nghĩa là có tháng `failed`; danh sách nằm ở cuối console và trong `reports\run_log.csv`.
@@ -85,18 +88,12 @@ Script mở một phiên Spark, đọc schema và số dòng của từng partit
 ## Kho Hive local
 
 ```powershell
-Set-Location D:\BIGDATA\2-processing
+Set-Location <repo>\2-processing
 .\.venv\Scripts\python.exe src\register_warehouse.py
 ```
 
 `src/register_warehouse.py` dựng metastore Derby nhúng rồi đăng ký cây Parquet `data/clean/trips` thành bảng `nyc_taxi.trips` (`sink.hive_table`) bằng `LOCATION` + `MSCK REPAIR TABLE`, không ghi lại byte nào. Script in ra số partition (kỳ vọng 188), số cột và tổng dòng, và trả exit code 1 nếu tổng dòng lệch `1.506.791.871` đã nghiệm thu; `--skip-count` bỏ phần đếm khi chỉ cần đăng ký lại. Toàn bộ chạy mất khoảng 35 giây vì `count(*)` lấy từ footer Parquet.
 
 Hai hạn chế của cách này: metastore Derby **chỉ một tiến trình** truy cập nên không phục vụ cả nhóm qua mạng, và bảng đang trỏ vào dữ liệu trên máy nguồn — muốn dùng làm kho chung vẫn phải đăng ký trên HDFS của nhóm. Vì là external table, `DROP TABLE` không xoá dữ liệu; ngược lại `INSERT OVERWRITE` sẽ ghi đè vào `data/clean/trips`.
-
-## Kiểm thử
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-```
 
 `docs/schema.md` được sinh lại từ schema DataFrame thực tế khi pipeline chạy.

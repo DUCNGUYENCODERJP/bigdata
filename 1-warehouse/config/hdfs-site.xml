@@ -75,7 +75,7 @@
        .\tools\Set-Host.ps1 (no bao dam du 3 cho tren + alias sslip.io). -->
   <property>
     <name>dfs.datanode.hostname</name>
-    <value>192-168-100-19.sslip.io</value>
+    <value>192-168-100-17.sslip.io</value>
   </property>
 
   <property>

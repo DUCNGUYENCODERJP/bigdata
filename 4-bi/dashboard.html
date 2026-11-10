@@ -3,270 +3,801 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NYC TLC Yellow Taxi — Big Data & Machine Learning Dashboard</title>
+  <title>NYC TLC Yellow Taxi — Hệ Thống Báo Cáo & Phân Tích Dữ Liệu Lớn (Big Data BI)</title>
   
-  <!-- External CSS -->
+  <!-- File stylesheet hệ thống giao diện Enterprise Dark Mode -->
   <link rel="stylesheet" href="assets/css/dashboard.css">
   
-  <!-- Chart.js CDN -->
+  <!-- Thư viện vẽ biểu đồ chuyên nghiệp Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
-  <!-- Header -->
-  <header>
-    <div class="header-title">
-      <h1>🚖 NYC TLC Yellow Taxi Analytics & BI <span class="badge">Enterprise Dashboard</span></h1>
-      <p>Hệ thống phân tích nhu cầu và dự báo điều hành thông minh | Apache Hadoop • Apache Hive • Apache Spark ML</p>
-    </div>
-    <div class="header-actions">
-      <button class="btn" onclick="window.print()">🖨️ Xuất Báo Cáo / In PDF</button>
-      <button class="btn btn-primary" onclick="window.location.reload()">🔄 Làm Mới Dữ Liệu</button>
+  <!-- ========================================================================= -->
+  <!-- TRẠNG THÁI KẾT NỐI VÀ CẢNH BÁO LỖI -->
+  <!-- ========================================================================= -->
+  <aside class="db-status-bar loading" id="dbConnectionStatus" role="status" aria-live="polite">
+    <span class="status-icon"><span class="spinner"></span></span>
+    <span class="status-text">Đang nạp cache Hive; server sẽ chỉ bổ sung các partition chưa đọc.</span>
+  </aside>
+
+  <!-- ========================================================================= -->
+  <!-- THANH ĐIỀU HƯỚNG TRÊN CÙNG (ENTERPRISE TOP NAVIGATION BAR)                -->
+  <!-- ========================================================================= -->
+  <header class="navbar">
+    <div class="nav-container">
+
+      <!-- Brand & Project Info -->
+      <div class="brand" onclick="switchTab(0)" title="Về trang tổng quan">
+        <div class="brand-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/>
+            <circle cx="7" cy="17" r="2"/>
+            <path d="M9 17h6"/>
+            <circle cx="17" cy="17" r="2"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1>NYC TAXI BI <span class="brand-badge">CAPSTONE</span></h1>
+          <p>Hệ Thống Phân Tích Dữ Liệu Lớn & Dự Báo Nhu Cầu • Hadoop • Hive • Spark ML</p>
+        </div>
+      </div>
+
+      <!-- Segmented Nav Tabs -->
+      <nav class="nav-tabs" role="tablist">
+        <button class="tab-btn active" onclick="switchTab(0)" id="navBtn0" role="tab" aria-selected="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/>
+          </svg>
+          <span>Tổng Quan Nhu Cầu</span>
+        </button>
+
+        <button class="tab-btn" onclick="switchTab(1)" id="navBtn1" role="tab" aria-selected="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+          <span>Giá Cước & Chuyến Hủy</span>
+        </button>
+
+        <button class="tab-btn" onclick="switchTab(2)" id="navBtn2" role="tab" aria-selected="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>
+          </svg>
+          <span>Dự Báo Học Máy (ML)</span>
+        </button>
+      </nav>
+
+      <!-- Action Buttons -->
+      <div class="nav-actions">
+        <button class="btn btn-ai" onclick="openGeminiModal()" title="Cấu hình Google Gemini AI Analyst">
+          <span class="sparkle-icon">✨</span>
+          <span>Gemini AI Analyst</span>
+          <span class="ai-status-dot" id="geminiStatusDot"></span>
+        </button>
+
+        <button class="btn btn-ghost" onclick="window.print()" title="Xuất báo cáo sang PDF hoặc in tài liệu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/>
+          </svg>
+          <span>In Báo Cáo</span>
+        </button>
+
+      </div>
+
     </div>
   </header>
 
-  <!-- Navigation Tabs -->
-  <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab(0)">📊 Nhu Cầu & Bản Đồ Thành Phố</button>
-    <button class="tab-btn" onclick="switchTab(1)">💰 Giá Cước, Thời Gian & Tỷ Lệ Hủy</button>
-    <button class="tab-btn" onclick="switchTab(2)">🤖 Mô Hình Dự Báo Machine Learning</button>
-  </div>
+  <!-- ========================================================================= -->
+  <!-- THANH THÔNG TIN BỐI CẢNH (SUB-HEADER CONTEXT STRIP)                        -->
+  <!-- ========================================================================= -->
+  <section class="context-strip">
+    <div class="context-container">
+      <div class="context-chips">
+        <span class="context-chip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>
+          </svg>
+          Giai đoạn: <strong id="contextPeriodText">Đang kết nối SQL...</strong>
+        </span>
 
-  <!-- ========================================================================= -->
-  <!-- TAB 1: EXECUTIVE OVERVIEW & DEMAND HEATMAP -->
-  <!-- ========================================================================= -->
-  <div id="tab-0" class="tab-content active">
-    
-    <!-- Top KPIs -->
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <span class="kpi-label">Tổng Cuốc Xe Trong Kho</span>
-        <div class="kpi-value">1.506 Tỷ</div>
-        <span class="kpi-desc">188 tháng (2011–2026), 33.59 GiB Parquet sạch</span>
+        <span class="context-chip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/>
+          </svg>
+          Kho lưu trữ: <strong id="contextStorageSize">Đang kiểm tra HDFS...</strong>
+        </span>
+
+        <span class="context-chip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>
+          </svg>
+          Phạm vi không gian: <strong>263 Taxi Zones • 5 Boroughs (NYC)</strong>
+        </span>
       </div>
-      <div class="kpi-card success">
-        <span class="kpi-label">Lưu Lượng Bình Quân Tháng</span>
-        <div class="kpi-value">2.92 Triệu</div>
-        <span class="kpi-desc">Mẫu phân tích tổng hợp đại diện</span>
-      </div>
-      <div class="kpi-card accent">
-        <span class="kpi-label">Giá Cước Trung Bình</span>
-        <div class="kpi-value">$17.85</div>
-        <span class="kpi-desc">Dao động từ $16.20 đến $22.50 theo giờ</span>
-      </div>
-      <div class="kpi-card purple">
-        <span class="kpi-label">Thời Gian Di Chuyển TB</span>
-        <div class="kpi-value">17.2 phút</div>
-        <span class="kpi-desc">Đỉnh điểm 23.5 phút lúc 18h tan tầm</span>
-      </div>
+
     </div>
+  </section>
 
-    <!-- Charts Row 1 -->
-    <div class="grid-2">
-      <!-- Borough Distribution -->
+  <!-- ========================================================================= -->
+  <!-- KHU VỰC NỘI DUNG CHÍNH (MAIN WRAPPER & TAB CONTENT)                        -->
+  <!-- ========================================================================= -->
+  <main class="main-wrapper">
+
+    <!-- ======================================================================= -->
+    <!-- TAB 0: TỔNG QUAN NHU CẦU & BẢN ĐỒ THÀNH PHỐ                             -->
+    <!-- ======================================================================= -->
+    <section id="tab-0" class="tab-pane active" role="tabpanel">
+
+      <!-- 4 THẺ KPI CHÍNH -->
+      <div class="kpi-row">
+        <!-- KPI 1 -->
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-header">
+            <span class="kpi-title">Tổng Số Chuyến Đi</span>
+            <div class="kpi-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/>
+                <circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <span class="kpi-value" id="kpiTotalRecords">—</span>
+            <span class="kpi-tag tag-blue">Đã làm sạch</span>
+          </div>
+          <div class="kpi-footer" id="kpiPartition">Đang nạp dữ liệu từ Hive SQL...</div>
+        </div>
+
+        <!-- KPI 2 -->
+        <div class="kpi-card kpi-green">
+          <div class="kpi-header">
+            <span class="kpi-title">Tổng Doanh Thu Cước</span>
+            <div class="kpi-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <span class="kpi-value" id="kpiRevenue">—</span>
+            <span class="kpi-tag tag-green">Tích lũy</span>
+          </div>
+          <div class="kpi-footer">Doanh thu cước ròng toàn thời gian hoạt động</div>
+        </div>
+
+        <!-- KPI 3 -->
+        <div class="kpi-card kpi-amber">
+          <div class="kpi-header">
+            <span class="kpi-title">Giá Cước Trung Bình</span>
+            <div class="kpi-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <span class="kpi-value" id="kpiAvgFare">—</span>
+            <span class="kpi-tag tag-amber">Bình quân</span>
+          </div>
+          <div class="kpi-footer">Giá cước trung bình mỗi chuyến</div>
+        </div>
+
+        <!-- KPI 4 -->
+        <div class="kpi-card kpi-purple">
+          <div class="kpi-header">
+            <span class="kpi-title">Thời Lượng Di Chuyển TB</span>
+            <div class="kpi-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <span class="kpi-value" id="kpiAvgDuration">—</span>
+            <span class="kpi-tag tag-blue">Bình quân</span>
+          </div>
+          <div class="kpi-footer">Thời gian trung bình mỗi chuyến</div>
+        </div>
+      </div>
+
+      <!-- BIỂU ĐỒ 1: XU HƯỚNG SẢN LƯỢNG CHUYẾN ĐI DÀI HẠN (MACRO TREND - FULL WIDTH) -->
       <div class="card">
         <div class="card-header">
-          <div>
-            <div class="card-title">📍 Thị Phần Nhu Cầu Theo Quận (Borough Share)</div>
-            <div class="card-subtitle">Manhattan chiếm ưu thế tuyệt đối trong lưu lượng Yellow Taxi</div>
+          <div class="card-title-group">
+            <div class="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="card-title">Xu Hướng Sản Lượng Chuyến Đi Theo Từng Tháng (2011 — 2026)</h2>
+              <p class="card-subtitle" id="monthlySubtitle">Đang nạp chuỗi thời gian vĩ mô từ Hive SQL...</p>
+            </div>
           </div>
         </div>
-        <div style="height: 280px; display: flex; justify-content: center;">
-          <canvas id="chartBorough"></canvas>
+        <div class="chart-box" style="height: 310px;">
+          <canvas id="chartMonthlyTrips"></canvas>
         </div>
       </div>
 
-      <!-- Top Pickup Zones -->
+      <!-- LƯỚI 2 BIỂU ĐỒ PHÂN BỐ KHÔNG GIAN (50% / 50%) -->
+      <div class="grid-2">
+        <!-- Biểu đồ Donut: Thị phần Quận -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>
+                </svg>
+              </div>
+              <div>
+                <h2 class="card-title">Thị Phần Nhu Cầu Theo Quận (Borough Share)</h2>
+                <p class="card-subtitle">Tỷ trọng số chuyến taxi tập trung theo từng quận New York</p>
+              </div>
+            </div>
+          </div>
+          <div class="chart-box" style="height: 280px;">
+            <canvas id="chartBorough"></canvas>
+          </div>
+        </div>
+
+        <!-- Biểu đồ Bar ngang: Top 8 Điểm Đón Xe Cao Nhất -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+                </svg>
+              </div>
+              <div>
+                <h2 class="card-title">Top 8 Khu Vực Đón Xe Cao Nhất (Pickup Zones)</h2>
+                <p class="card-subtitle">Các điểm đón xe có lưu lượng hành khách lớn nhất thành phố</p>
+                <p class="card-subtitle" id="topZonesCacheNote" hidden></p>
+              </div>
+            </div>
+          </div>
+          <div class="chart-box" style="height: 280px;">
+            <canvas id="chartTopZones"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- BIỂU ĐỒ MA TRẬN NHIỆT NHU CẦU 24X7 (MICRO PATTERN - FULL WIDTH) -->
+      <div class="card heatmap-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="card-icon" style="color: var(--color-rose); background: var(--color-rose-glow); border-color: rgba(244, 63, 94, 0.3);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="card-title">Ma Trận Nhiệt Mật Độ Nhu Cầu Đi Xe (24 Giờ × 7 Ngày)</h2>
+              <p class="card-subtitle">Phân bổ chi tiết mật độ theo từng giờ trong ngày và các thứ trong tuần</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="heatmap-scroll-area" id="heatmapWrapper">
+          <!-- Bảng Heatmap được sinh tự động bởi heatmap.js -->
+        </div>
+
+        <div class="heatmap-legend-bar">
+          <span>Thang mật độ:</span>
+          <div class="legend-scale">
+            <span class="legend-color-chip" style="background: rgba(56, 189, 248, 0.15);"></span>
+            <span>Thấp</span>
+          </div>
+          <div class="legend-scale">
+            <span class="legend-color-chip" style="background: rgba(245, 158, 11, 0.75);"></span>
+            <span>Vừa</span>
+          </div>
+          <div class="legend-scale">
+            <span class="legend-color-chip" style="background: rgba(244, 63, 94, 0.95);"></span>
+            <span>Cao điểm (Rush Hour)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- KHỐI PHÂN TÍCH TỰ ĐỘNG BẰNG AI (GEMINI 3.5 FLASH - TAB 0) -->
+      <div class="card ai-insight-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="card-icon ai-gradient-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="card-title">Phân Tích Dữ Liệu Tự Động (AI Data Insights)</h2>
+              <p class="card-subtitle">Suy luận chuyên sâu từ số liệu chuỗi thời gian vĩ mô và phân bố không gian</p>
+            </div>
+          </div>
+          <div class="ai-card-actions">
+            <span class="ai-badge-chip" id="aiBadgeTab0">Bộ suy luận SQL</span>
+            <button class="btn btn-ghost btn-sm" onclick="refreshAiInsights(0, true)" title="Yêu cầu Gemini phân tích lại dữ liệu Tab này">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 13px; height: 13px;">
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+              </svg>
+              <span>Phân tích lại</span>
+            </button>
+          </div>
+        </div>
+        <div class="ai-insight-content" id="aiInsightTab0">
+          <div class="ai-loading-box">
+            <span class="ai-gemini-spinner"></span>
+            <span>Đang chờ dữ liệu Hive SQL để phân tích...</span>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- TAB 1: GIÁ CƯỚC, THỜI GIAN & TỶ LỆ HỦY CHUYẾN                           -->
+    <!-- ======================================================================= -->
+    <section id="tab-1" class="tab-pane" role="tabpanel">
+
+      <!-- 4 THẺ KPI TAB 1 -->
+      <div class="kpi-row">
+        <!-- KPI 1 -->
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-header">
+            <span class="kpi-title">Tổng Bản Ghi Gốc (Raw TLC)</span>
+            <div class="kpi-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <span class="kpi-value" id="kpiRawRecords">—</span>
+            <span class="kpi-tag tag-blue">Bản ghi gốc</span>
+          </div>
+          <div class="kpi-footer">Tổng số cuốc xe thu thập ban đầu từ Data Warehouse</div>
+        </div>
+
+        <!-- KPI 2 -->
+        <div class="kpi-card kpi-rose">
+          <div class="kpi-header">
+            <span class="kpi-title">Chuyến Bị Hủy / Cước Âm</span>
+            <div class="kpi-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/><line x1="4.93" x2="19.07" y1="4.93" y2="19.07"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <span class="kpi-value" id="kpiCancelledRecords">—</span>
+            <span class="kpi-tag tag-amber" style="background: rgba(244, 63, 94, 0.15); color: #f87171; border-color: rgba(244, 63, 94, 0.35);">Đã lọc bỏ</span>
+          </div>
+          <div class="kpi-footer">Các chuyến giao dịch có cước âm hoặc hoàn tiền</div>
+        </div>
+
+        <!-- KPI 3 -->
+        <div class="kpi-card kpi-purple">
+          <div class="kpi-header">
+            <span class="kpi-title">Tỷ Lệ Chuyến Hủy / Âm</span>
+            <div class="kpi-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <span class="kpi-value" id="kpiCancellationRate">—</span>
+            <span class="kpi-tag tag-green">Ngưỡng an toàn</span>
+          </div>
+          <div class="kpi-footer">Tỷ lệ cước âm trên toàn bộ dữ liệu lịch sử</div>
+        </div>
+
+        <!-- KPI 4 -->
+        <div class="kpi-card kpi-amber">
+          <div class="kpi-header">
+            <span class="kpi-title">Tổng Giá Trị Cước Âm</span>
+            <div class="kpi-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m14.5 9-5 5"/><path d="m9.5 9 5 5"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <span class="kpi-value" id="kpiRefundAmount">—</span>
+          <span class="kpi-tag tag-amber">Cước âm</span>
+          </div>
+          <div class="kpi-footer" id="kpiNegativeFareNote">Tổng giá trị cước âm hoặc hoàn tiền trong dữ liệu gốc</div>
+        </div>
+      </div>
+
+      <!-- BIỂU ĐỒ ĐƯỜNG KÉP GIÁ CƯỚC & THỜI LƯỢNG 24H (FULL WIDTH) -->
       <div class="card">
         <div class="card-header">
-          <div>
-            <div class="card-title">🏆 Top 8 Khu Vực Đón Xe Đông Nhất (PULocationID)</div>
-            <div class="card-subtitle">Điểm nóng tập trung ở khu Trung tâm và Sân bay quốc tế</div>
+          <div class="card-title-group">
+            <div class="card-icon" style="color: var(--color-amber); background: var(--color-amber-glow); border-color: rgba(245, 158, 11, 0.3);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="card-title">Tương Quan Biến Động Giá Cước & Thời Lượng Di Chuyển Theo 24 Giờ</h2>
+              <p class="card-subtitle">So sánh mức cước bình quân (USD) và thời gian hành trình (phút) theo từng khung giờ</p>
+            </div>
           </div>
         </div>
-        <div style="height: 280px;">
-          <canvas id="chartTopZones"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- Demand Heatmap 24x7 -->
-    <div class="card grid-full">
-      <div class="card-header">
-        <div>
-          <div class="card-title">🔥 Ma Trận Nhiệt Nhu Cầu Đi Xe (Hour × Day of Week Heatmap)</div>
-          <div class="card-subtitle">Phân bố lưu lượng theo khung giờ và ngày trong tuần | Đỉnh điểm chiều tối các ngày làm việc và đêm cuối tuần</div>
-        </div>
-      </div>
-      <div class="heatmap-container" id="heatmapWrapper"></div>
-    </div>
-
-  </div>
-
-  <!-- ========================================================================= -->
-  <!-- TAB 2: FARE, TRAVEL TIME & CANCELLED TRIPS -->
-  <!-- ========================================================================= -->
-  <div id="tab-1" class="tab-content">
-    
-    <div class="kpi-grid">
-      <div class="kpi-card accent">
-        <span class="kpi-label">Cước Sân Bay Cố Định</span>
-        <div class="kpi-value">$52.00 - $70.00</div>
-        <span class="kpi-desc">Tuyến JFK ↔ Manhattan áp dụng biểu cước riêng</span>
-      </div>
-      <div class="kpi-card danger">
-        <span class="kpi-label">Tổng Cuốc Xe Bị Hủy</span>
-        <div class="kpi-value">5.02 Triệu</div>
-        <span class="kpi-desc">Cuốc xe có giá cước âm hoặc hoàn tiền (0.33% toàn hệ thống)</span>
-      </div>
-      <div class="kpi-card purple">
-        <span class="kpi-label">Năm Tỷ Lệ Hoàn Cước Cao Nhất</span>
-        <div class="kpi-value">2025 (8% - 11%)</div>
-        <span class="kpi-desc">Giai đoạn ghi nhận tỷ lệ hoàn cước đột biến từ hệ thống</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Khung Giờ Tắc Đường Nhất</span>
-        <div class="kpi-value">17h00 – 19h00</div>
-        <span class="kpi-desc">Thời lượng trung bình tăng 92% so với sáng sớm</span>
-      </div>
-    </div>
-
-    <div class="grid-2">
-      <!-- Hourly Fare & Duration Trend -->
-      <div class="card grid-full">
-        <div class="card-header">
-          <div>
-            <div class="card-title">📈 Biến Động Giá Cước & Thời Lượng Di Chuyển Theo 24 Giờ Trong Ngày</div>
-            <div class="card-subtitle">Sáng sớm cước cao do các tuyến đường dài ra sân bay; Chiều tối ùn tắc kéo dài thời gian di chuyển</div>
-          </div>
-        </div>
-        <div style="height: 320px;">
+        <div class="chart-box" style="height: 320px;">
           <canvas id="chartHourlyCombo"></canvas>
         </div>
       </div>
-    </div>
 
-    <div class="grid-2">
-      <!-- Cancelled Trips by Hour -->
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">🚫 Phân Bố Cuốc Xe Bị Hủy Theo Khung Giờ</div>
-            <div class="card-subtitle">Số lượng cuốc bị hoàn cước tập trung vào khung giờ chiều tối</div>
+      <!-- LƯỚI 2 BIỂU ĐỒ PHÂN TÍCH CHUYẾN BỊ HỦY (50% / 50%) -->
+      <div class="grid-2">
+        <!-- Biểu đồ 1: Cuốc hủy theo giờ -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <div class="card-icon" style="color: var(--color-rose); background: var(--color-rose-glow); border-color: rgba(244, 63, 94, 0.3);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>
+                </svg>
+              </div>
+              <div>
+                <h2 class="card-title">Phân Bố Chuyến Bị Hủy Theo Khung Giờ</h2>
+                <p class="card-subtitle">Số chuyến cước âm hoặc hoàn trả phân bổ trong 24h</p>
+              </div>
+            </div>
+          </div>
+          <div class="chart-box" style="height: 270px;">
+            <canvas id="chartCancelledHours"></canvas>
           </div>
         </div>
-        <div style="height: 260px;">
-          <canvas id="chartCancelledHours"></canvas>
-        </div>
-      </div>
 
-      <!-- Cancelled Trips Rate by Year -->
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">⚠️ Tỷ Lệ Cuốc Xe Bị Hủy / Hoàn Cước Theo Năm</div>
-            <div class="card-subtitle">Đánh giá rủi ro doanh thu và chất lượng bản ghi dữ liệu</div>
+        <!-- Biểu đồ 2: Tỷ lệ chất lượng dữ liệu & Ngoại lệ -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <div class="card-icon" style="color: var(--color-green); background: var(--color-green-glow); border-color: rgba(16, 185, 129, 0.3);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/>
+                </svg>
+              </div>
+              <div>
+                <h2 class="card-title">Đánh Giá Chất Lượng & Phân Loại Bản Ghi</h2>
+                <p class="card-subtitle">Tỷ lệ dữ liệu sạch đưa vào Warehouse so với dữ liệu ngoại lai</p>
+              </div>
+            </div>
+          </div>
+          <div class="chart-box" style="height: 270px;">
+            <canvas id="chartCancelledYears"></canvas>
           </div>
         </div>
-        <div style="height: 260px;">
-          <canvas id="chartCancelledYears"></canvas>
+      </div>
+
+      <!-- KHỐI PHÂN TÍCH TỰ ĐỘNG BẰNG AI (GEMINI 3.5 FLASH - TAB 1) -->
+      <div class="card ai-insight-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="card-icon ai-gradient-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="card-title">Phân Tích Dữ Liệu Tự Động (AI Data Insights)</h2>
+              <p class="card-subtitle">Đánh giá cơ cấu giá cước 24h, tắc nghẽn giao thông và kiểm toán dữ liệu chuyến hủy</p>
+            </div>
+          </div>
+          <div class="ai-card-actions">
+            <span class="ai-badge-chip" id="aiBadgeTab1">Bộ suy luận SQL</span>
+            <button class="btn btn-ghost btn-sm" onclick="refreshAiInsights(1, true)" title="Yêu cầu Gemini phân tích lại dữ liệu Tab này">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 13px; height: 13px;">
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+              </svg>
+              <span>Phân tích lại</span>
+            </button>
+          </div>
+        </div>
+        <div class="ai-insight-content" id="aiInsightTab1">
+          <div class="ai-loading-box">
+            <span class="ai-gemini-spinner"></span>
+            <span>Đang chờ dữ liệu Hive SQL để phân tích...</span>
+          </div>
         </div>
       </div>
-    </div>
 
-  </div>
+    </section>
+
+    <!-- ======================================================================= -->
+    <!-- TAB 2: MÔ HÌNH HỌC MÁY DỰ BÁO (MACHINE LEARNING)                         -->
+    <!-- ======================================================================= -->
+    <section id="tab-2" class="tab-pane" role="tabpanel">
+
+      <!-- 4 THẺ KPI ĐÁNH GIÁ MÔ HÌNH -->
+      <div class="kpi-row">
+        <!-- KPI 1 -->
+        <div class="kpi-card kpi-green">
+          <div class="kpi-header">
+            <span class="kpi-title">Mô Hình Học Máy Dự Báo</span>
+            <div class="kpi-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 8h6"/><path d="M9 12h6"/><path d="M9 16h6"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <span class="kpi-value" style="font-size: 26px;">GBTRegressor</span>
+            <span class="kpi-tag tag-blue" id="kpiModelTag">Đang đánh giá</span>
+          </div>
+          <div class="kpi-footer">Thuật toán Cây Quyết Định Tăng Cường (Spark MLlib)</div>
+        </div>
+
+        <!-- KPI 2 -->
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-header">
+            <span class="kpi-title">Mức Cải Thiện RMSE</span>
+            <div class="kpi-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <span class="kpi-value" id="kpiRmseImprove">—</span>
+            <span class="kpi-tag tag-blue" id="kpiRmseTag">Đang đánh giá</span>
+          </div>
+          <div class="kpi-footer" id="kpiBaselineRmseSub">Đang nạp từ Spark ML...</div>
+        </div>
+
+        <!-- KPI 3 -->
+        <div class="kpi-card kpi-purple">
+          <div class="kpi-header">
+            <span class="kpi-title">Mức Cải Thiện MAE</span>
+            <div class="kpi-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <span class="kpi-value" id="kpiMaeImprove">—</span>
+            <span class="kpi-tag tag-blue" id="kpiMaeTag">Đang đánh giá</span>
+          </div>
+          <div class="kpi-footer">Đánh giá trên 20% mẫu kiểm thử chuỗi thời gian</div>
+        </div>
+
+        <!-- KPI 4 -->
+        <div class="kpi-card kpi-amber">
+          <div class="kpi-header">
+            <span class="kpi-title">Mức Cải Thiện MAPE</span>
+            <div class="kpi-icon-badge">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <span class="kpi-value" id="kpiMapeImprove">—</span>
+            <span class="kpi-tag tag-blue" id="kpiMapeTag">Đang đánh giá</span>
+          </div>
+          <div class="kpi-footer">Tỷ lệ sai số phần trăm tuyệt đối trung bình</div>
+        </div>
+      </div>
+
+      <!-- LƯỚI 60 / 40: BẢNG SO SÁNH CHỈ SỐ & THÔNG SỐ HUẤN LUYỆN -->
+      <div class="grid-60-40">
+        <!-- Bảng đánh giá mô hình -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <div class="card-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 3v18h18"/><rect width="4" height="7" x="7" y="10"/><rect width="4" height="12" x="15" y="5"/>
+                </svg>
+              </div>
+              <div>
+                <h2 class="card-title">Bảng So Sánh Chỉ Số Đánh Giá Mô Hình (Evaluation Metrics)</h2>
+                <p class="card-subtitle">Kết quả kiểm thử độc lập trên 20% mẫu chuỗi thời gian mới nhất (Out-of-Time Test Set)</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Tên Mô Hình</th>
+                  <th>Thuật Toán</th>
+                  <th>RMSE</th>
+                  <th>MAE</th>
+                  <th>MAPE (%)</th>
+                  <th>Đánh Giá</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>zone_hour_mean_baseline</strong></td>
+                  <td>Trung bình lịch sử theo (Khu Vực × Giờ)</td>
+                  <td class="stat-mono" id="tblBaseRmse">—</td>
+                  <td class="stat-mono" id="tblBaseMae">—</td>
+                  <td class="stat-mono" id="tblBaseMape">—</td>
+                  <td><span class="badge-baseline">Mô hình cơ sở</span></td>
+                </tr>
+                <tr id="gbtModelRow">
+                  <td><strong>gbt_regressor</strong></td>
+                  <td>Spark ML GBTRegressor + OneHotEncoder</td>
+                  <td><span class="stat-mono" id="tblGbtRmse">—</span></td>
+                  <td><span class="stat-mono" id="tblGbtMae">—</span></td>
+                  <td><span class="stat-mono" id="tblGbtMape">—</span></td>
+                  <td><span id="gbtModelRating" class="badge-baseline">Đang đánh giá</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Thẻ thông số huấn luyện (Model Specs) -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <div class="card-icon" style="color: var(--color-purple); background: var(--color-purple-glow); border-color: rgba(168, 85, 247, 0.3);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>
+                </svg>
+              </div>
+              <div>
+                <h2 class="card-title">Cấu Hình & Đặc Trưng Huấn Luyện</h2>
+                <p class="card-subtitle">Thiết lập thử nghiệm Spark ML</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="specs-list">
+            <div class="spec-item">
+              <span class="spec-label">Điểm đón thử nghiệm:</span>
+              <span class="spec-val" id="specModelZone">Đang tải...</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Phân chia mẫu:</span>
+              <span class="spec-val" id="specTrainTest">Đang tải...</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Chiến lược chia:</span>
+              <span class="spec-val">Time-series Split (Không rò rỉ)</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Tập đặc trưng (Features):</span>
+              <span class="spec-val" style="font-size: 11.5px;">[Khu vực đón, giờ, thứ, tháng]</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Engine huấn luyện:</span>
+              <span class="spec-val">Apache Spark MLlib v3.5</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BIỂU ĐỒ CHUỖI THỜI GIAN ACTUAL VS FORECAST (FULL WIDTH) -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="card-icon" style="color: var(--color-green); background: var(--color-green-glow); border-color: rgba(16, 185, 129, 0.3);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="card-title">Chuỗi Thời Gian: Nhu Cầu Thực Tế vs Mô Hình Dự Báo</h2>
+              <p class="card-subtitle" id="forecastSubtitle">Đang nạp chuỗi thời gian dự báo từ Spark MLlib...</p>
+            </div>
+          </div>
+        </div>
+        <div class="chart-box" style="height: 350px;">
+          <canvas id="chartForecast"></canvas>
+        </div>
+      </div>
+
+      <!-- KHỐI PHÂN TÍCH TỰ ĐỘNG BẰNG AI (GEMINI 3.5 FLASH - TAB 2) -->
+      <div class="card ai-insight-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="card-icon ai-gradient-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/>
+              </svg>
+            </div>
+            <div>
+              <h2 class="card-title">Phân Tích Dữ Liệu Tự Động (AI Data Insights)</h2>
+              <p class="card-subtitle">Đánh giá hiệu năng thuật toán Machine Learning Spark MLlib và giá trị điều phối thực tiễn</p>
+            </div>
+          </div>
+          <div class="ai-card-actions">
+            <span class="ai-badge-chip" id="aiBadgeTab2">Bộ suy luận SQL</span>
+            <button class="btn btn-ghost btn-sm" onclick="refreshAiInsights(2, true)" title="Yêu cầu Gemini phân tích lại dữ liệu Tab này">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 13px; height: 13px;">
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+              </svg>
+              <span>Phân tích lại</span>
+            </button>
+          </div>
+        </div>
+        <div class="ai-insight-content" id="aiInsightTab2">
+          <div class="ai-loading-box">
+            <span class="ai-gemini-spinner"></span>
+            <span>Đang chờ kết quả đánh giá từ Spark MLlib...</span>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
 
   <!-- ========================================================================= -->
-  <!-- TAB 3: MACHINE LEARNING FORECAST & EVALUATION -->
+  <!-- CHÂN TRANG DASHBOARD (FOOTER)                                             -->
   <!-- ========================================================================= -->
-  <div id="tab-2" class="tab-content">
-    
-    <div class="kpi-grid">
-      <div class="kpi-card success">
-        <span class="kpi-label">Mô Hình Học Máy Dự Báo</span>
-        <div class="kpi-value">GBTRegressor</div>
-        <span class="kpi-desc">Gradient Boosted Trees (Apache Spark MLlib)</span>
-      </div>
-      <div class="kpi-card success">
-        <span class="kpi-label">Độ Cải Thiện RMSE</span>
-        <div class="kpi-value">+41.2%</div>
-        <span class="kpi-desc">Từ 42.15 (Baseline) giảm xuống 24.80 (GBT)</span>
-      </div>
-      <div class="kpi-card success">
-        <span class="kpi-label">Độ Cải Thiện MAE</span>
-        <div class="kpi-value">+47.3%</div>
-        <span class="kpi-desc">Từ 31.40 (Baseline) giảm xuống 16.55 (GBT)</span>
-      </div>
-      <div class="kpi-card success">
-        <span class="kpi-label">Độ Cải Thiện MAPE</span>
-        <div class="kpi-value">+58.8%</div>
-        <span class="kpi-desc">Từ 45.2% (Baseline) giảm xuống 18.6% (GBT)</span>
-      </div>
+  <footer class="footer">
+    <div class="nav-container">
+      <p>
+        <span>© 2026 Big Data Platform & Analytics Team</span>
+        <span class="footer-bullet">•</span>
+        <span>NYC TLC Yellow Taxi Enterprise BI System</span>
+        <span class="footer-bullet">•</span>
+        <span>Apache Hadoop HDFS</span>
+        <span class="footer-bullet">•</span>
+        <span>Apache Hive</span>
+        <span class="footer-bullet">•</span>
+        <span>Apache Spark MLlib</span>
+      </p>
     </div>
-
-    <!-- Comparison Table -->
-    <div class="card grid-full">
-      <div class="card-header">
-        <div>
-          <div class="card-title">📊 Bảng So Sánh Chỉ Số Đánh Giá (Model Evaluation Metrics)</div>
-          <div class="card-subtitle">Đánh giá trên tập kiểm thử độc lập (20% dữ liệu chuỗi thời gian)</div>
-        </div>
-      </div>
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Tên Mô Hình</th>
-            <th>Loại Phương Pháp</th>
-            <th>RMSE (Sai Số Căn Phương)</th>
-            <th>MAE (Sai Số Tuyệt Đối)</th>
-            <th>MAPE (%) (Tỷ Lệ Sai Số)</th>
-            <th>Đánh Giá Hiệu Năng</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>zone_hour_mean_baseline</strong></td>
-            <td>Trung bình lịch sử theo (Khu vực × Giờ)</td>
-            <td>42.1540</td>
-            <td>31.4025</td>
-            <td>45.20%</td>
-            <td><span class="tag-baseline">Mô hình Cơ Sở (Baseline)</span></td>
-          </tr>
-          <tr>
-            <td><strong>gbt_regressor</strong></td>
-            <td>Spark ML GBTRegressor + OneHotEncoder</td>
-            <td><strong>24.8012</strong></td>
-            <td><strong>16.5540</strong></td>
-            <td><strong>18.60%</strong></td>
-            <td><span class="tag-better">⭐ Tối ưu (+47% độ chính xác)</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- Forecast Time Series Chart -->
-    <div class="card grid-full">
-      <div class="card-header">
-        <div>
-          <div class="card-title">📈 Biểu Đồ Chuỗi Thời Gian: Nhu Cầu Thực Tế vs Mô Hình Dự Báo</div>
-          <div class="card-subtitle">Mô hình GBT nắm bắt chính xác các đỉnh cao điểm tan tầm và chu kỳ cuối tuần hơn hẳn Baseline</div>
-        </div>
-      </div>
-      <div style="height: 340px;">
-        <canvas id="chartForecast"></canvas>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- Footer -->
-  <footer>
-    <p>Big Data Platform & Analytics — NYC TLC Yellow Taxi • Apache Hadoop • Apache Hive • Apache Spark ML • Power BI</p>
   </footer>
 
-  <!-- Scripts -->
-  <script src="assets/js/app.js"></script>
-  <script src="assets/js/heatmap.js"></script>
+  <!-- ========================================================================= -->
+  <!-- MODAL CẤU HÌNH GOOGLE GEMINI AI ANALYST                                    -->
+  <!-- ========================================================================= -->
+  <div class="gemini-modal-backdrop" id="geminiModal">
+    <div class="gemini-modal-dialog">
+      <div class="gemini-modal-header">
+        <div class="gemini-modal-title">
+          <span class="sparkle-icon" style="font-size: 20px;">✨</span>
+          <h3>Cấu Hình Google Gemini AI Analyst</h3>
+        </div>
+        <button class="gemini-modal-close" onclick="closeGeminiModal()" aria-label="Đóng">&times;</button>
+      </div>
+      <div class="gemini-modal-body">
+        <p class="gemini-modal-desc">
+          Có thể kết nối Google Gemini bằng khóa API của bạn. Khi chưa cấu hình khóa, dashboard vẫn phân tích trực tiếp các số liệu Hive SQL và Spark ML bằng bộ suy luận cục bộ.
+        </p>
+        <div class="gemini-field-group">
+          <label for="geminiApiKeyInput">Khóa API Google Gemini (Gemini API Key):</label>
+          <input type="password" id="geminiApiKeyInput" placeholder="Nhập khóa API Gemini..." autocomplete="off" />
+          <small class="gemini-help-text">Khóa được lưu trong localStorage của trình duyệt này. Để xóa khóa và dùng phân tích cục bộ, hãy để trống rồi lưu.</small>
+        </div>
+        <div class="gemini-model-info">
+          <div class="model-info-row">
+            <span class="info-label">Mô hình AI:</span>
+            <span class="info-val">Gemini API (model thử theo cấu hình mã nguồn)</span>
+          </div>
+          <div class="model-info-row">
+            <span class="info-label">Phương thức:</span>
+            <span class="info-val">Suy luận động 100% từ Database (Zero-Hardcode)</span>
+          </div>
+        </div>
+      </div>
+      <div class="gemini-modal-footer">
+        <button class="btn btn-ghost" onclick="closeGeminiModal()">Đóng</button>
+        <button class="btn btn-primary" onclick="saveGeminiApiKeyFromModal()">Lưu & Kích Hoạt Phân Tích</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- SCRIPTS ĐIỀU KHIỂN & VẼ BIỂU ĐỒ                                            -->
+  <!-- ========================================================================= -->
+  <script src="assets/js/gemini-ai.js"></script>
   <script src="assets/js/charts.js"></script>
+  <script src="assets/js/heatmap.js"></script>
+  <script src="assets/js/app.js"></script>
+
 </body>
 </html>

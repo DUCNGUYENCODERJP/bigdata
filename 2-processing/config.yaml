@@ -1,14 +1,15 @@
 paths:
-  raw_dir: D:/BIGDATA/2-processing/data/raw
-  clean_dir: D:/BIGDATA/2-processing/data/clean
-  reports_dir: D:/BIGDATA/2-processing/reports
-  spark_local_dir: D:/tmp/spark
-  schema_doc: D:/BIGDATA/2-processing/docs/schema_auto.md
+  raw_dir: data/raw
+  clean_dir: data/clean
+  reports_dir: reports
+  temp_dir: data/tmp
+  spark_local_dir: data/spark_tmp
+  schema_doc: docs/schema_auto.md
 
-hadoop_home: D:/hadoop
+hadoop_home: C:/hadoop
 
 runtime:
-  java_home: C:/Program Files/Eclipse Adoptium/jdk-17.0.15.6-hotspot
+  java_home: C:/Program Files/Java/jdk-17
   spark_master: local[6]
   driver_memory: 10g
   shuffle_partitions: 32

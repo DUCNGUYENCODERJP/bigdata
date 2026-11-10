@@ -35,24 +35,12 @@ SWITCH(
 // 3. Định dạng nhãn khung giờ hiển thị (vd: 08:00):
 Hour_Display = FORMAT('demand_heatmap'[pickup_hour], "00") & ":00"
 
+// Chọn Hour_Display -> Sort by Column -> Hour_Sort_Order để xếp 00:00 → 23:00.
+Hour_Sort_Order = 'demand_heatmap'[pickup_hour]
 
-// --- BẢNG: predictions ---
 
-// 4. Tên thứ cho bảng dự báo:
-Day_Name_Pred = 
-SWITCH(
-    'predictions'[day_of_week],
-    1, "Chủ Nhật",
-    2, "Thứ Hai",
-    3, "Thứ Ba",
-    4, "Thứ Tư",
-    5, "Thứ Năm",
-    6, "Thứ Sáu",
-    7, "Thứ Bảy"
-)
+// --- BẢNG: predictions (tổng hợp trên toàn bộ test set) ---
 
-// 5. Sai số tuyệt đối của GBT:
-GBT_Absolute_Error = ABS('predictions'[label] - 'predictions'[gbt_prediction])
-
-// 6. Sai số tuyệt đối của Baseline:
-Baseline_Absolute_Error = ABS('predictions'[label] - 'predictions'[baseline_prediction])
+// Sai số tuyệt đối của GBT và baseline trên tổng chuyến test.
+GBT_Absolute_Error = ABS('predictions'[actual_test_trips] - 'predictions'[gbt_prediction])
+Baseline_Absolute_Error = ABS('predictions'[actual_test_trips] - 'predictions'[baseline_prediction])

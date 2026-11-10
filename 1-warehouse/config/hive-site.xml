@@ -36,12 +36,28 @@
   <!-- Location cua database/bang ma HMS tra ve cho client. PHAI co scheme hdfs://
        va dung IP do duoc tu ben ngoai mang Docker, vi Spark chay tren Windows la
        ben ngoai; ten "namenode" chi be trong compose network moi resolve duoc.
-       IP o day PHAI trung voi IP Wi-Fi hien tai cua may (2026-11-03: 192.168.100.19).
-       HMS luu location vung ve trong DB Derby, nen sau khi doi IP phai chay
-       .\tools\Set-Host.ps1 -RebuildCatalog de tao lai database bang IP moi. -->
+       IP nay phai truy cap duoc tu may chay Spark va cac client ben ngoai Docker.
+       Metadata Hive da ton tai can duoc cap nhat rieng khi doi IP. -->
   <property>
     <name>metastore.warehouse.dir</name>
-    <value>hdfs://192.168.100.19:8020/opt/hive/data/warehouse</value>
+    <value>hdfs://192.168.100.17:8020/opt/hive/data/warehouse</value>
+  </property>
+
+  <property>
+    <name>hive.metastore.uris</name>
+    <value>thrift://metastore:9083</value>
+  </property>
+  <property>
+    <name>hive.server2.thrift.bind.host</name>
+    <value>0.0.0.0</value>
+  </property>
+  <property>
+    <name>hive.server2.thrift.port</name>
+    <value>10000</value>
+  </property>
+  <property>
+    <name>hive.server2.authentication</name>
+    <value>NONE</value>
   </property>
 
   <!-- Spark 4.0.1 mang ve Hive client 2.3.9; server 3.1.3 mac dinh bat

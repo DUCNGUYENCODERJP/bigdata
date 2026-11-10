@@ -1,6 +1,7 @@
 """Báo cáo mốc 6: xác minh toàn cây warehouse, bảng theo tháng, danh sách lỗi, sinh docs/schema.md."""
 
 from __future__ import annotations
+import logging
 
 import argparse
 import csv
@@ -343,20 +344,21 @@ def main(argv: list[str] | None = None) -> int:
     report = build_report(months, manifest, disk, load_run_log(run_log_path), baseline_month)
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary_path.write_text(render_markdown(report), encoding="utf-8")
-    print(f"warehouse_summary: {summary_path}")
-    print(
+    logging.info(f"warehouse_summary: {summary_path}")
+    logging.info(
         f"partition_kiem_tra={report['months_checked']}/{report['months_requested']} "
         f"lech_schema={len(report['schema_mismatch'])} thieu_partition={len(report['missing_partitions'])} "
         f"arithmetic_fail={len(report['arithmetic_fail'])}"
     )
-    print(f"dong_tren_dia={report['total_rows']:,} output_bytes={report['total_bytes']:,}")
-    print(f"failed={report['failed_months']} flagged={report['flagged_months']}")
+    logging.info(f"dong_tren_dia={report['total_rows']:,} output_bytes={report['total_bytes']:,}")
+    logging.info(f"failed={report['failed_months']} flagged={report['flagged_months']}")
     if args.schema_doc:
         args.schema_doc.parent.mkdir(parents=True, exist_ok=True)
         args.schema_doc.write_text(render_schema_doc(report, config), encoding="utf-8")
-        print(f"schema_doc: {args.schema_doc}")
+        logging.info(f"schema_doc: {args.schema_doc}")
     return 1 if report["schema_mismatch"] or report["arithmetic_fail"] else 0
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     sys.exit(main())

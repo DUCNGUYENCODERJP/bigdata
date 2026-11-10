@@ -128,19 +128,21 @@ def download_with_policy(url: str, destination: Path, expected_size: int) -> int
         try:
             _LAST_HTTP_REQUEST_AT = time.monotonic()
             response = requests.get(url, headers={}, stream=True, timeout=(30, 180))
-            if response.status_code in NETWORK_ERROR_CODES or response.status_code >= 500:
-                detail = _exact_http_error(response)
-                LOGGER.error("Request failure for %s: %s", url, detail)
+            try:
+                if response.status_code in NETWORK_ERROR_CODES or response.status_code >= 500:
+                    detail = _exact_http_error(response)
+                    LOGGER.error("Request failure for %s: %s", url, detail)
+                    if attempt == attempts - 1:
+                        raise RuntimeError(detail)
+                    continue
+                if response.status_code >= 400:
+                    raise RuntimeError(_exact_http_error(response))
+                with partial.open("wb") as output:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            output.write(chunk)
+            finally:
                 response.close()
-                if attempt == attempts - 1:
-                    raise RuntimeError(detail)
-                continue
-            response.raise_for_status()
-            with partial.open("wb") as output:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        output.write(chunk)
-            response.close()
             actual_size = partial.stat().st_size
             if actual_size != expected_size:
                 partial.unlink(missing_ok=True)
@@ -209,10 +211,21 @@ def validate_existing_partition(month: str, config: dict[str, Any]) -> dict[str,
 
 def _disk_report(config: dict[str, Any], disk_usage_fn: Callable = shutil.disk_usage) -> dict[str, Any]:
     spark_path = Path(config["paths"]["spark_local_dir"])
-    result = {}
-    for drive in ("C:\\", "D:\\"):
-        usage = disk_usage_fn(drive)
-        result[drive[0]] = usage.free
+    locations = [
+        Path(config["paths"]["raw_dir"]),
+        Path(config["paths"]["clean_dir"]),
+        spark_path,
+    ]
+    volumes: dict[str, Path] = {}
+    for location in locations:
+        resolved = location.resolve()
+        volume = resolved.anchor or str(resolved)
+        volumes.setdefault(volume, resolved)
+    free_by_volume = {
+        volume: disk_usage_fn(str(path if path.exists() else Path(volume))).free
+        for volume, path in volumes.items()
+    }
+    result = {"free_by_volume": free_by_volume}
     result["spark_temp_bytes"] = file_tree_bytes(spark_path)
     return result
 
@@ -220,12 +233,12 @@ def _disk_report(config: dict[str, Any], disk_usage_fn: Callable = shutil.disk_u
 def _check_capacity(month: str, config: dict[str, Any], disk_usage_fn: Callable) -> dict[str, Any]:
     report = _disk_report(config, disk_usage_fn)
     required = float(config["runtime"].get("min_free_disk_gb", 8)) * 1024**3
-    for drive in ("C", "D"):
-        if report[drive] < required:
-            free_gb = report[drive] / 1024**3
+    for volume, free_bytes in report["free_by_volume"].items():
+        if free_bytes < required:
+            free_gb = free_bytes / 1024**3
             threshold = required / 1024**3
             raise RuntimeError(
-                f"Month {month}: drive {drive}:\\ has {free_gb:.2f} GB free; "
+                f"Month {month}: volume {volume} has {free_gb:.2f} GB free; "
                 f"minimum configured is {threshold:.2f} GB. "
                 f"Spark temp {config['paths']['spark_local_dir']} uses "
                 f"{report['spark_temp_bytes']} bytes."
@@ -493,20 +506,20 @@ def main(argv: list[str] | None = None) -> int:
         )
         if args.dry_run:
             for row in plan["months"]:
-                print(f"{row['month']}: {row['status']}")
-            print(f"run={plan['run_count']} skip={plan['skip_count']} by_status={plan['counts_by_status']}")
-            print(f"raw download bytes={plan['raw_bytes_to_download']:,} ({plan['raw_bytes_to_download'] / 2**30:.1f} GiB)")
-            print(f"estimated output bytes={plan['estimated_output_bytes']:,} ({plan['estimated_output_bytes'] / 2**30:.1f} GiB)")
-            print(f"estimated pipeline seconds={plan['estimated_seconds']:.0f} ({plan['estimated_seconds'] / 3600:.1f} h)")
-            print(f"estimated download seconds={plan['estimated_download_seconds']:.0f} ({plan['estimated_download_seconds'] / 3600:.1f} h)")
+                logging.info(f"{row['month']}: {row['status']}")
+            logging.info(f"run={plan['run_count']} skip={plan['skip_count']} by_status={plan['counts_by_status']}")
+            logging.info(f"raw download bytes={plan['raw_bytes_to_download']:,} ({plan['raw_bytes_to_download'] / 2**30:.1f} GiB)")
+            logging.info(f"estimated output bytes={plan['estimated_output_bytes']:,} ({plan['estimated_output_bytes'] / 2**30:.1f} GiB)")
+            logging.info(f"estimated pipeline seconds={plan['estimated_seconds']:.0f} ({plan['estimated_seconds'] / 3600:.1f} h)")
+            logging.info(f"estimated download seconds={plan['estimated_download_seconds']:.0f} ({plan['estimated_download_seconds'] / 3600:.1f} h)")
             return 0
         statuses = [record["status"] for record in plan]
         summary = {status: statuses.count(status) for status in sorted(set(statuses))}
         for status in ("failed", "flagged"):
             months_in_status = [record["month"] for record in plan if record["status"] == status]
             if months_in_status:
-                print(f"{status} months ({len(months_in_status)}): {', '.join(months_in_status)}")
-        print(f"batch finished: {summary}")
+                logging.info(f"{status} months ({len(months_in_status)}): {', '.join(months_in_status)}")
+        logging.info(f"batch finished: {summary}")
         # Batch không dừng vì một tháng lỗi, nhưng exit code vẫn báo cho wrapper PowerShell.
         return 1 if statuses.count("failed") else 0
     except Exception:

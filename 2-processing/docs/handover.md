@@ -11,7 +11,6 @@ Phạm vi: pipeline tải – kiểm tra – làm sạch – ghi warehouse cho *
 | Dòng trên đĩa | **1.506.791.871** | `reports/warehouse_summary.md` |
 | Dòng bị loại | 9.974.909 = **0,658%** trên 1.516.766.780 dòng raw | `reports/run_log.csv` |
 | Postcheck (`invalid`, `missing`) | **0 / 0** cho cả 188 tháng | `reports/run_log.csv`, `src/output_validation.py` |
-| Kiểm thử | **34/34** xanh | `tests/` |
 | Kích thước output | 36.068.314.549 B = 2894 file (1447 Parquet 35.788.700.805 B + 1447 `.crc` 279.613.744 B) | `reports/data_transfer_manifest.csv` |
 | Nơi 34 GB đang nằm | máy nguồn `D:\BIGDATA\2-processing\data\clean\trips`, **chưa** ở hệ thống chung của nhóm | mục 5 và 7 |
 
@@ -22,7 +21,6 @@ Dữ liệu raw không nằm trong repo: **54 GB** (20 GB raw + 34 GB clean), tr
 ```
 src/            pipeline: download.py, quality_check.py, clean.py, writer.py,
                 output_validation.py, pipeline.py, batch_runner.py, warehouse_report.py
-tests/          34 test (pytest), fixture tự dựng DataFrame, không cần mạng
 config.yaml     đường dẫn, ngưỡng làm sạch, schema baseline, sink
 scripts/        run_batch.ps1 — wrapper PowerShell cho batch dài
 docs/           schema.md (23 cột vật lý + 2 cột phân vùng), handover.md
@@ -132,7 +130,7 @@ MSCK REPAIR TABLE nyc_taxi.trips;   -- nạp 188 partition year=/month= từ tê
 
 Ngoại hình lệnh này dễ gây hiểu hai chỗ: `USING parquet` + `LOCATION` trong Spark SQL **đã là external table** (DROP bảng không xoá dữ liệu), không cần từ khoá `EXTERNAL` của Hive; và external table chỉ **đăng ký metadata trỏ vào Parquet có sẵn** — nó không tự sinh hay tự sửa dữ liệu, không chạy `MSCK REPAIR` thì query thấy bảng rỗng.
 
-Nhánh `sink.type: hive` trong `src/writer.py` dùng `saveAsTable`, tức tạo **managed table** trong Hive warehouse chứ không phải external ở `/data/...`; nó **chưa từng chạy thật và không có unit test**. Với đích đã chốt ở trên thì không cần chạy lại pipeline: ghi file byte-nguyên rồi đăng ký bảng rẻ hơn và kiểm chứng được.
+Nhánh `sink.type: hive` trong `src/writer.py` dùng `saveAsTable`, tức tạo **managed table** trong Hive warehouse chứ không phải external ở `/data/...`; nhánh này **chưa từng chạy thật**. Với đích đã chốt ở trên thì không cần chạy lại pipeline: ghi file byte-nguyên rồi đăng ký bảng rẻ hơn và kiểm chứng được.
 
 ## 8. Liên hệ
 
@@ -153,7 +151,7 @@ Số đã kiểm chứng bằng truy vấn thật từ Spark chạy trên Window
 
 - `1-warehouse/src/verify_access.py` → **PASS**: 188 partition, toàn bảng 1.506.791.871, pruning đúng (`year=2026/month=8` chỉ đọc 1 thư mục), 2011-01 = 13.441.123, 2020-03 = 2.988.041, 2026-08 = 3.277.598.
 - Raw của TLC cũng đã lên HDFS: **`default.raw_nyc_taxi`** — 189 file / **20.986.383.705 B** (19,55 GiB), khớp từng byte với `2-processing/data/raw`; **188/188 partition**; bảng có **19 cột dữ liệu + year/month** sinh từ `source_manifest.csv` (không mở 188 file). Một scan thật qua đủ 188 file (587 s) cho **1.516.766.780 dòng** = đúng tổng footer, và **5.026.251 dòng `fare_amount < 0`** — đúng thứ Người 3 cần mà clean đã loại.
-- **Hai cột `RatecodeID` và `passenger_count` không có trong bảng raw.** Lý do đo được chứ không phải suy: hai cột này là INT64 ở 133 tháng rồi DOUBLE ở 55 tháng. `1-warehouse/tools/probe_type_promotion.py` đã đo đủ **15 ca** (mọi cặp khai-báo/kieu-file liên quan, chạy 17:37 ngày 2026-11-03): `bigint` đọc được INT32+INT64, `double` đọc được INT32+DOUBLE, nhưng **không kiểu nào đọc được cả INT64 lẫn DOUBLE** — `double←INT64` chết giữa chừng (`FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH`, SQLSTATE KD001), `bigint←DOUBLE` chết ngay khi mở cột (`SchemaColumnConvertNotSupportedException`), `int←INT64` cũng chết. `3-analytics` không dùng cả hai (`config.py`/`model.py` loại `passenger_count` có chủ đích).
+- **Hai cột `RatecodeID` và `passenger_count` không có trong bảng raw.** Lý do đo được chứ không phải suy: hai cột này là INT64 ở 133 tháng rồi DOUBLE ở 55 tháng. Các lần đọc thử trực tiếp đã đo đủ **15 ca** (mọi cặp khai-báo/kiểu-file liên quan): `bigint` đọc được INT32+INT64, `double` đọc được INT32+DOUBLE, nhưng **không kiểu nào đọc được cả INT64 lẫn DOUBLE** — `double←INT64` chết giữa chừng (`FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH`, SQLSTATE KD001), `bigint←DOUBLE` chết ngay khi mở cột (`SchemaColumnConvertNotSupportedException`), `int←INT64` cũng chết. `3-analytics` không dùng cả hai (`config.py`/`model.py` loại `passenger_count` có chủ đích).
 - View `clean_nyc_taxi_tlc` không chỉ đổi tên mà còn **cast lại hai cột thời gian về `TIMESTAMP`**, vì bảng sạch mang kiểu `TIMESTAMP_NTZ` do Parquet lưu micros; `analysis.py` của Người 3 làm `CAST(tpep_dropoff_datetime AS BIGINT)` và Spark 4 từ chối cast từ `TIMESTAMP_NTZ` (`DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION`). Sau khi view cast: công thức của họ cho 17,1653 phút ở partition 2026-08, **khớp tuyệt đối** (lệch 0,000000) với cột `trip_duration_min` đã lưu.
 
 ### Điều Người 3 phải biết (mới, phát hiện khi đọc `3-analytics/`)
@@ -170,7 +168,7 @@ spark-submit --conf spark.hadoop.hive.metastore.uris=thrift://<IP>:9083 `
 
 `--output-base hdfs:///user/hive/warehouse/nyc_taxi_analytics` mặc định dùng được luôn vì `fs.defaultFS` đã trỏ vào cluster. Hai lưu ý trung thực: (a) `tpep_*` trong raw là mốc thời gian **UTC** theo cách TLC ghi file, nên `year()/hour()` suy từ cột có thể lệch vài giờ so với partition `year=/month=` — số của clean (đã chuẩn sang giờ địa phương NYC) mới là số để báo cáo; (b) view chỉ đổi tên và khai lại kiểu cho đúng những gì file Parquet đang mang, **không** tính lại đơn vị hay giá trị nào.
 
-Mảnh 1 đã chạy **chính code của Người 3** thay họ trước khi họ bật máy: `1-warehouse/src/verify_person3_pipeline.py` import nguyên `analysis.py`, `data_loader.py`, `evaluation.py`, `feature_engineering.py`, `model.py`, `writer.py` trong `3-analytics/` (chỉ đọc, không sửa một dòng nào) và gọi đúng thứ tự như `main.py` trên partition 2024-01. **PASS 6/6 nhóm hàm trong 521 s**: `load_clean_trips` qua view → 2.924.072 dòng; 4 câu SQL → 5.296 dòng analytics / 24 dòng theo giờ / 168 ô heatmap; `load_raw_trips` + cancelled → 37.448 cuốc huỷ của 2024-01; feature + chronological split → train 62.528 / test 14.884; GBT + metrics; `writer.py` ghi 2 Parquet + 1 CSV lên HDFS (`/tmp/nyc_taxi_analytics_smoke`).
+Mảnh 1 từng chạy **chính code của Người 3** trên partition 2024-01 bằng một smoke harness tạm đã được dọn khỏi repo. **PASS 6/6 nhóm hàm trong 521 s**: `load_clean_trips` qua view → 2.924.072 dòng; 4 câu SQL → 5.296 dòng analytics / 24 dòng theo giờ / 168 ô heatmap; `load_raw_trips` + cancelled → 37.448 cuốc huỷ của 2024-01; feature + chronological split → train 62.528 / test 14.884; GBT + metrics; `writer.py` ghi 2 Parquet + 1 CSV lên HDFS (`/tmp/nyc_taxi_analytics_smoke`).
 
 Hai điều Người 3 nên đọc trước khi tốn một ngày:
 1. **`CAST(tpep_dropoff_datetime AS BIGINT)` trong `analysis.py` không chạy được trực tiếp trên `clean_nyc_taxi`** (`DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION` vì cột là `TIMESTAMP_NTZ`). View `clean_nyc_taxi_tlc` đã cast sang `TIMESTAMP`, và số nó cho khớp tuyệt đối với cột `trip_duration_min` (17,1653 phút ở 2026-08, lệch 0,000000). Qua view thì không phải sửa code.

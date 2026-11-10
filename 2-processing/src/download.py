@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import requests
-import yaml
+from config_utils import load_project_config
 
 LOGGER = logging.getLogger("download")
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
@@ -18,8 +18,7 @@ CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
 
 def load_config(config_path: Path = CONFIG_PATH) -> dict[str, Any]:
     """Đọc cấu hình YAML của dự án."""
-    with config_path.open(encoding="utf-8") as config_file:
-        return yaml.safe_load(config_file)
+    return load_project_config(config_path)
 
 
 def download_resumable(

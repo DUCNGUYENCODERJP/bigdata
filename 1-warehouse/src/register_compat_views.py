@@ -22,10 +22,12 @@ Chạy lại bao nhiêu lần cũng được: `CREATE OR REPLACE VIEW` chỉ ghi
 """
 
 from __future__ import annotations
+import logging
 
 import argparse
 import os
 import sys
+import tempfile
 import time
 
 from pyspark.sql import SparkSession
@@ -33,8 +35,8 @@ from pyspark.sql.types import TimestampType
 
 SOURCE_TABLE = "clean_nyc_taxi"
 VIEW_NAME = "clean_nyc_taxi_tlc"
-SPARK_LOCAL_DIR = os.environ.get("SPARK_LOCAL_DIR", "D:/tmp/spark")
-HADOOP_HOME = os.environ.get("HADOOP_HOME", "D:/hadoop").replace("\\", "/")
+SPARK_LOCAL_DIR = os.environ.get("SPARK_LOCAL_DIR", os.path.join(tempfile.gettempdir(), "nyc-taxi-spark"))
+HADOOP_HOME = os.environ.get("HADOOP_HOME", "C:/hadoop").replace("\\", "/")
 
 # Cột mà 3-analytics thực sự đụng tới (data_loader + analysis + feature_engineering).
 # Cac cot con lai cua bang sach van giu nguyen ten de quy truy van khong bi mat.
@@ -102,7 +104,7 @@ def build_spark(host: str) -> SparkSession:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=f"Tạo view {VIEW_NAME} cho 3-analytics.")
-    parser.add_argument("--host", default=os.environ.get("WAREHOUSE_HOST", "192.168.100.19"))
+    parser.add_argument("--host", default=os.environ.get("WAREHOUSE_HOST", "192.168.100.17"))
     parser.add_argument("--database", default="default")
     args = parser.parse_args()
 
@@ -111,7 +113,7 @@ def main() -> int:
     spark.sql(f"USE `{args.database}`")
 
     if len(spark.table(SOURCE_TABLE).columns) != 25:
-        print(f"[FAIL] {SOURCE_TABLE} không có 25 cột; chạy register_hive_tables.py trước.")
+        logging.error(f"[FAIL] {SOURCE_TABLE} không có 25 cột; chạy register_hive_tables.py trước.")
         return 1
 
     spark.sql(VIEW_SQL)
@@ -120,29 +122,29 @@ def main() -> int:
     # ma Spark 4 tu choi cast TIMESTAMP_NTZ -> BIGINT. View phai tra TimestampType.
     dtypes = {f.name: f.dataType for f in view.schema.fields}
     not_ts = [n for n in DATETIME_COLUMNS if not isinstance(dtypes.get(n), TimestampType)]
-    print(f"[types]  " + ",  ".join(f"{n} = {dtypes[n]}" for n in DATETIME_COLUMNS))
+    logging.info(f"[types]  " + ",  ".join(f"{n} = {dtypes[n]}" for n in DATETIME_COLUMNS))
     if not_ts:
-        print(f"[FAIL] {not_ts} khong phai TIMESTAMP (mau doi loi cho Nguoi 3 o tren)")
+        logging.error(f"[FAIL] {not_ts} khong phai TIMESTAMP (mau doi loi cho Nguoi 3 o tren)")
         return 1
     missing = sorted(set(REQUIRED_BY_PERSON3) - set(view.columns))
-    print(f"[view]   `{args.database}`.`{VIEW_NAME}`  {len(view.columns)} cột")
-    print(f"[view]   cột cần cho 3-analytics: {', '.join(REQUIRED_BY_PERSON3)}")
+    logging.info(f"[view]   `{args.database}`.`{VIEW_NAME}`  {len(view.columns)} cột")
+    logging.info(f"[view]   cột cần cho 3-analytics: {', '.join(REQUIRED_BY_PERSON3)}")
     if missing:
-        print(f"[FAIL] view vẫn thiếu {missing}")
+        logging.error(f"[FAIL] view vẫn thiếu {missing}")
         return 1
 
     # Partition pruning phai xuyen qua view, neu khong thi Nguoi 3 quet ca 34 GB.
     query = f"SELECT count(*) AS n FROM {VIEW_NAME} WHERE year = 2026 AND month = 8"
     plan = spark.sql(f"EXPLAIN EXTENDED {query}").collect()[0][0]
     pruned = "year=2026/month=8" in plan
-    print(f"[pruning] view có cắt partition: {pruned}")
+    logging.info(f"[pruning] view có cắt partition: {pruned}")
     if not pruned:
-        print("[FAIL] kế hoạch đọc không giới hạn vào partition — xem explain trong log")
-        print(plan[-1200:])
+        logging.error("[FAIL] kế hoạch đọc không giới hạn vào partition — xem explain trong log")
+        logging.info(plan[-1200:])
         return 1
 
     n = spark.sql(f"SELECT count(*) AS n FROM {VIEW_NAME} WHERE year = 2026 AND month = 8").collect()[0]["n"]
-    print(f"[count] 2026-08 qua view = {n:,}  (bang goc la 3,277,598)")
+    logging.info(f"[count] 2026-08 qua view = {n:,}  (bang goc la 3,277,598)")
 
     # Do dung bieu thuc cua Nguoi 3 (analysis.py::_trip_duration_minutes): cast hai
     # cot timestamp ve so va tru nhau. So voi cot trip_duration_min san co cua bang
@@ -153,22 +155,23 @@ def main() -> int:
             FROM {VIEW_NAME} WHERE year = 2026 AND month = 8"""
     ).collect()[0]
     drift = abs(float(check["theirs"]) - float(check["stored"]))
-    print(f"[duration] 2026-08: cong thuc Nguoi 3 = {check['theirs']:.4f} phut, "
+    logging.info(f"[duration] 2026-08: cong thuc Nguoi 3 = {check['theirs']:.4f} phut, "
           f"cot trip_duration_min = {check['stored']:.4f} phut, lech {drift:.6f}")
     if drift > 0.01:
-        print("[FAIL] view lam doi thoi luong — kiem tra spark.sql.session.timeZone")
+        logging.error("[FAIL] view lam doi thoi luong — kiem tra spark.sql.session.timeZone")
         return 1
 
     raw = spark.table("raw_nyc_taxi")
     raw_missing = sorted(set(REQUIRED_BY_PERSON3) - set(raw.columns))
-    print(f"[raw]    raw_nyc_taxi {len(raw.columns)} cột, thiếu: {raw_missing or 'không'}")
+    logging.info(f"[raw]    raw_nyc_taxi {len(raw.columns)} cột, thiếu: {raw_missing or 'không'}")
     if raw_missing:
         return 1
 
-    print(f"[done] {time.monotonic() - started:.0f} s")
+    logging.info(f"[done] {time.monotonic() - started:.0f} s")
     spark.stop()
     return 0
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     sys.exit(main())

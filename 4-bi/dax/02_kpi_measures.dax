@@ -5,6 +5,12 @@
 // 1. Tổng số chuyến taxi:
 Total_Trips = SUM('analytics_summary'[trip_count])
 
+// Số chuyến theo khu vực; dùng quan hệ taxi_zone_lookup[LocationID] → zone_demand[PULocationID].
+Zone_Trip_Count = SUM('zone_demand'[trip_count])
+
+// Số chuyến cho ma trận nhiệt 7 ngày × 24 giờ.
+Heatmap_Trip_Count = SUM('demand_heatmap'[trip_count])
+
 // 2. Tổng số chuyến hiển thị đẹp (Triệu / Nghìn):
 Total_Trips_Formatted = 
 VAR TotalVal = [Total_Trips]
@@ -16,13 +22,22 @@ IF(
 )
 
 // 3. Giá cước trung bình toàn thành phố (USD):
-City_Avg_Fare = AVERAGE('fare_travel_by_hour'[avg_fare])
+// Cân theo số chuyến của từng giờ; không lấy trung bình đơn giản 24 giá trị giờ.
+City_Avg_Fare =
+DIVIDE(
+    SUMX('fare_travel_by_hour', 'fare_travel_by_hour'[avg_fare] * 'fare_travel_by_hour'[trip_count]),
+    SUM('fare_travel_by_hour'[trip_count])
+)
 City_Avg_Fare_Formatted = "$" & FORMAT([City_Avg_Fare], "0.00")
 
 // 4. Thời gian di chuyển trung bình (phút):
-City_Avg_Duration = AVERAGE('fare_travel_by_hour'[avg_duration_min])
+// Cân theo số chuyến của từng giờ; không lấy trung bình đơn giản 24 giá trị giờ.
+City_Avg_Duration =
+DIVIDE(
+    SUMX('fare_travel_by_hour', 'fare_travel_by_hour'[avg_duration_min] * 'fare_travel_by_hour'[trip_count]),
+    SUM('fare_travel_by_hour'[trip_count])
+)
 City_Avg_Duration_Formatted = FORMAT([City_Avg_Duration], "0.0") & " phút"
 
-// 5. Tổng số cuốc bị huỷ (fare_amount < 0):
-Total_Cancelled_Trips = SUM('cancelled_trips'[cancelled_count])
-Total_Cancelled_Formatted = FORMAT([Total_Cancelled_Trips], "#,##0") & " chuyến"
+// Chênh lệch raw HDFS so với manifest; 0 nghĩa là khớp.
+Raw_Reconciliation_Delta = SUM('raw_reconciliation'[delta_hive_minus_manifest])

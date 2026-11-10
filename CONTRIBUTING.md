@@ -17,7 +17,7 @@ Sửa thư mục của người khác = **mở Issue trước**, được đồn
 - **Không push thẳng vào `main`** (đã bật branch protection).
 - Tên nhánh: `<tên-ngắn>/<mục-dịch>`, ví dụ `duoc/hive-ingest`, `khoa/gbt-baseline`. Mỗi người chỉ tạo nhánh của chính mình — không dùng nhánh chung.
 - Một PR = một việc. PR chỉ chạm vào thư mục của bạn thì merge ngay được; PR chạm thư mục khác cần chủ thư mục review (CODEOWNERS tự gán).
-- Trước khi mở PR: `git pull --rebase origin main` rồi chạy test của slice bạn.
+- Trước khi mở PR: `git pull --rebase origin main` rồi kiểm tra lại các file thuộc slice đã sửa.
 
 ## 3. Cái gì không được commit
 
@@ -26,13 +26,12 @@ Sửa thư mục của người khác = **mở Issue trước**, được đồn
 - **Khóa bí mật**: token, mật khẩu, cookie. Repo này **public**, mọi thứ bạn push đều công khai.
 - Báo cáo sinh lại được thì cân nhắc; các file bằng chứng nghiệm thu của Người 2 đã được chọn có chủ đích trong `2-processing/.gitignore`.
 
-## 4. Chạy thử slice của Người 2
+## 4. Chuẩn bị môi trường của Người 2
 
 ```powershell
 Set-Location 2-processing
 python -m venv .venv
 .\.venv\Scripts\pip.exe install -r requirements.txt
-.\.venv\Scripts\python.exe -m pytest -q
 ```
 
 Cần JDK 17; trên Windows cần thêm `winutils.exe` + `hadoop.dll` và `HADOOP_HOME`. Sửa các đường dẫn tuyệt đối trong `2-processing/config.yaml` theo máy của bạn.

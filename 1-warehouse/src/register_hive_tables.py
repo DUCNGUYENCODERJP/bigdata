@@ -22,11 +22,14 @@ Windows xuất cổng ra mọi interface, nên client ở ngoài mạng containe
 """
 
 from __future__ import annotations
+import logging
 
 import argparse
 import os
 import sys
+import tempfile
 import time
+from pathlib import Path
 
 from pyspark.sql import SparkSession, functions as F
 
@@ -35,8 +38,8 @@ TABLE_NAME = "clean_nyc_taxi"
 PARTITION_COLUMNS = ("year", "month")
 EXPECTED_PARTITIONS = 188
 EXPECTED_ROWS = 1_506_791_871
-SPARK_LOCAL_DIR = os.environ.get("SPARK_LOCAL_DIR", "D:/tmp/spark")
-HADOOP_HOME = os.environ.get("HADOOP_HOME", "D:/hadoop").replace("\\", "/")
+SPARK_LOCAL_DIR = os.environ.get("SPARK_LOCAL_DIR", str(Path(tempfile.gettempdir()) / "nyc-taxi-spark"))
+HADOOP_HOME = os.environ.get("HADOOP_HOME", "C:/hadoop").replace("\\", "/")
 
 
 def build_spark(host: str, app_name: str) -> SparkSession:
@@ -76,7 +79,7 @@ def registered_location(spark: SparkSession, qualified: str) -> str | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Tạo/nuôi bảng Hive clean_nyc_taxi nằm trên HDFS.")
-    parser.add_argument("--host", default=os.environ.get("WAREHOUSE_HOST", "192.168.36.64"),
+    parser.add_argument("--host", default=os.environ.get("WAREHOUSE_HOST", "192.168.100.17"),
                         help="IP thật của máy chạy cluster (nơi 8020/9083 mở ra host).")
     parser.add_argument("--skip-count", action="store_true",
                         help="Chỉ đăng ký + đối chiếu partition, không đếm dòng toàn bảng.")
@@ -100,11 +103,11 @@ def main() -> int:
 
     old = registered_location(spark, qualified)
     if old and not old.startswith(hdfs_uri):
-        print(f"[FAIL] {qualified} đã tồn tại và trỏ tới {old} — không phải cluster {hdfs_uri}.")
-        print("       Máy vừa đổi IP: location của bảng và của TỪNG partition bị ghi chết trong")
-        print("       catalog Derby, `CREATE TABLE IF NOT EXISTS` không sửa được (MSCK REPAIR cũng")
-        print("       sẽ treo vì nó đi tìm địa chỉ cũ). Hồi phục bằng một lệnh:")
-        print(r"         .\tools\Set-Host.ps1 -RebuildCatalog    # roi chay lai script nay")
+        logging.error(f"[FAIL] {qualified} đã tồn tại và trỏ tới {old} — không phải cluster {hdfs_uri}.")
+        logging.info("       Máy vừa đổi IP: location của bảng và của TỪNG partition bị ghi chết trong")
+        logging.info("       catalog Derby, `CREATE TABLE IF NOT EXISTS` không sửa được (MSCK REPAIR cũng")
+        logging.info("       sẽ treo vì nó đi tìm địa chỉ cũ). Hồi phục bằng một lệnh:")
+        logging.info(r"         .\tools\Set-Host.ps1 -RebuildCatalog    # roi chay lai script nay")
         return 1
 
     spark.sql(f"CREATE DATABASE IF NOT EXISTS `{args.database}`")
@@ -121,45 +124,55 @@ def main() -> int:
     spark.sql(f"MSCK REPAIR TABLE {qualified}")
 
     partition_count = spark.sql(f"SHOW PARTITIONS {qualified}").count()
-    columns = len(spark.table(qualified).columns)
+    registered_schema = [
+        (field.name.casefold(), field.dataType.simpleString())
+        for field in spark.table(qualified).schema.fields
+    ]
+    expected_schema = [
+        (field.name.casefold(), field.dataType.simpleString()) for field in data_fields
+    ] + [("year", "int"), ("month", "int")]
+    columns = len(registered_schema)
     where = spark.sql(f"DESCRIBE FORMATTED {qualified}").collect()
     table_location = [r[1] for r in where if r[0] == "Location"][0]
-    print(f"[table]    {qualified}")
-    print(f"[location] {table_location}")
-    print(f"[schema]   {columns} cột = {len(data_fields)} cột dữ liệu + year + month")
+    logging.info(f"[table]    {qualified}")
+    logging.info(f"[location] {table_location}")
+    logging.info(f"[schema]   {columns} cột = {len(data_fields)} cột dữ liệu + year + month")
 
-    if columns != len(data_fields) + 2:
+    if registered_schema != expected_schema:
         # IF NOT EXISTS im lặng giữ định nghĩa cũ; đây là external table nên DROP TABLE không xoá dữ liệu.
-        print(f"[FAIL] Bảng đã tồn tại với {columns} cột, khác schema trên HDFS ({len(data_fields) + 2}).")
-        print(f"       Chạy: spark.sql('DROP TABLE {qualified}') rồi chạy lại script này.")
+        logging.error("[FAIL] Schema bảng Hive không khớp footer Parquet trên HDFS.")
+        logging.info(f"       Expected: {expected_schema}")
+        logging.info(f"       Registered: {registered_schema}")
+        logging.info(f"       Chạy: spark.sql('DROP TABLE {qualified}') rồi chạy lại script này.")
         return 1
     if not table_location.startswith(hdfs_uri):
-        print(f"[FAIL] Location của bảng đang là {table_location} — khác cluster này ({hdfs_uri}).")
-        print("       Đây là dấu hiệu máy vừa đổi IP: location bị ghi chết trong catalog Derby,")
-        print("       `CREATE TABLE IF NOT EXISTS` không sửa được nó. Chạy:")
-        print("         .\\tools\\Set-Host.ps1 -RebuildCatalog   (roi chay lại script nay)")
+        logging.error(f"[FAIL] Location của bảng đang là {table_location} — khác cluster này ({hdfs_uri}).")
+        logging.info("       Đây là dấu hiệu máy vừa đổi IP: location bị ghi chết trong catalog Derby,")
+        logging.info("       `CREATE TABLE IF NOT EXISTS` không sửa được nó. Chạy:")
+        logging.info("         .\\tools\\Set-Host.ps1 -RebuildCatalog   (roi chay lại script nay)")
         return 1
     if partition_count != EXPECTED_PARTITIONS:
-        print(f"[FAIL] partition = {partition_count}/{EXPECTED_PARTITIONS} -> cây dữ liệu trên HDFS còn thiếu")
+        logging.error(f"[FAIL] partition = {partition_count}/{EXPECTED_PARTITIONS} -> cây dữ liệu trên HDFS còn thiếu")
         return 1
-    print(f"[partitions] {partition_count}/{EXPECTED_PARTITIONS} -> OK  ({time.monotonic() - started:.0f} s)")
+    logging.info(f"[partitions] {partition_count}/{EXPECTED_PARTITIONS} -> OK  ({time.monotonic() - started:.0f} s)")
 
     sample = spark.sql(
         f"SELECT count(*) AS n FROM {qualified} WHERE year = 2024 AND month = 1"
     ).collect()[0]["n"]
-    print(f"[count] 2024-01 = {sample:,}  (đọc từ footer Parquet, không quét file)")
+    logging.info(f"[count] 2024-01 = {sample:,}  (đọc từ footer Parquet, không quét file)")
 
     if not args.skip_count:
         total = spark.table(qualified).select(F.count(F.lit(1))).collect()[0][0]
-        print(f"[count] toàn bảng = {total:,}  mốc bàn giao của mảnh 2 là {EXPECTED_ROWS:,}")
+        logging.info(f"[count] toàn bảng = {total:,}  mốc bàn giao của mảnh 2 là {EXPECTED_ROWS:,}")
         if total != EXPECTED_ROWS:
-            print("[FAIL] Số dòng không khớp warehouse_summary.md")
+            logging.error("[FAIL] Số dòng không khớp warehouse_summary.md")
             return 1
 
-    print(f"[done] {time.monotonic() - started:.0f} s")
+    logging.info(f"[done] {time.monotonic() - started:.0f} s")
     spark.stop()
     return 0
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     sys.exit(main())

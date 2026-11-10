@@ -11,7 +11,7 @@ Người thực hiện: Người 2 (làm thay phần Người 1 theo thỏa thu�
 
 | Chỉ tiêu | Giá trị | Cách đo |
 |---|---|---|
-| Cluster | 4 container chạy: `nyc-namenode`, `nyc-datanode`, `nyc-metastore`, `nyc-client` | `docker compose ps` |
+| Cluster | 5 container: `nyc-namenode`, `nyc-datanode`, `nyc-metastore`, `nyc-hiveserver2`, `nyc-client` | `docker compose ps` |
 | Dữ liệu trên HDFS | **1447 file / 35.788.700.805 B / 205 thư mục** tại `/data/nyc_taxi/clean/trips` | `hdfs dfs -count -v`, `HdfsCopy` tự đối chiếu |
 | Khớp với đĩa local | **khớp từng byte** với `2-processing/data/clean/trips` | `[verify]` trong log copy, `PASS` |
 | Bảng Hive | `default.clean_nyc_taxi`, 25 cột, external table trên HDFS | `src/register_hive_tables.py` |
@@ -22,7 +22,7 @@ Người thực hiện: Người 2 (làm thay phần Người 1 theo thỏa thu�
 | Dòng toàn bảng raw | **1.516.766.780** = đúng tổng footer 188 tháng trong `source_manifest.csv` | một scan thật qua cả 188 file (587 s) |
 | Cuốc huỷ chỉ có ở raw | **5.026.251** dòng `fare_amount < 0` (0,33%) | `sum(CASE WHEN fare_amount < 0 ...)` |
 | Cầu nối tên cột | view `default.clean_nyc_taxi_tlc` (19 cột), partition pruning xuyên qua view, `2026-08 = 3.277.598` khớp bảng gốc | `src/register_compat_views.py` |
-| Code của Người 3 chạy trên kho này | **PASS 6/6 nhóm hàm** (= 8 bước của `main.py`) trên partition 2024-01, 521 s: 2.924.072 dòng sạch → 5.296 dòng analytics → 37.448 cuốc huỷ từ raw → split 62.528/14.884 → GBT + metrics → `writer.py` ghi Parquet/CSV lên HDFS | `src/verify_person3_pipeline.py` |
+| Code của Người 3 chạy trên kho này | **PASS 6/6 nhóm hàm** (= 8 bước của `main.py`) trên partition 2024-01, 521 s: 2.924.072 dòng sạch → 5.296 dòng analytics → 37.448 cuốc huỷ từ raw → split 62.528/14.884 → GBT + metrics → `writer.py` ghi Parquet/CSV lên HDFS | smoke run lịch sử |
 | Truy cập kiểu client | `spark.table("clean_nyc_taxi")` chạy được từ máy Windows, không cần biết đường dẫn file | `src/verify_access.py` |
 
 ## 2. Sơ đồ cluster và cổng
@@ -31,7 +31,8 @@ Người thực hiện: Người 2 (làm thay phần Người 1 theo thỏa thu�
 |---|---|---|---|
 | `namenode` | `apache/hadoop:3.4.1` | NameNode, giữ metadata HDFS | `8020` (RPC), `9870` (UI + WebHDFS) |
 | `datanode` | `apache/hadoop:3.4.1` | 1 DataNode, replication=1, chứa Clean + Raw (56,98 GB theo `dfsadmin -report`) | `9866` (block native), `9864` (WebHDFS data), `9867` (ipc) |
-| `metastore` | `apache/hive:3.1.3` | Hive Metastore Thrift + Derby nhúng | `9083` (Thrift), `10000` (chỉ dùng khi `SERVICE_NAME=hiveserver2`) |
+| `metastore` | `apache/hive:3.1.3` | Hive Metastore Thrift + Derby nhúng | `9083` (Thrift) |
+| `hiveserver2` | `apache/hive:3.1.3` | Hive SQL endpoint cho ODBC / Power BI | `10000` |
 | `client` | `apache/hadoop:3.4.1` | Shell phụ vụ `docker exec` (`hdfs dfs ...`), không cần cài Hadoop trên Windows | — |
 
 Volume: `./data/namenode`, `./data/datanode`, `./data/metastore` (có `metastore_db` của Derby).
@@ -42,8 +43,18 @@ Config: `./config/{core,hdfs,hive}-site.xml` mount vào cả 3 node.
 ```powershell
 Set-Location D:\BIGDATA\1-warehouse
 docker compose up -d
-docker compose ps               # ca 4 container phai "Up ... (healthy)"
+docker compose ps               # 5 service phai "Up"
 ```
+
+HiveServer2 phụ thuộc Metastore khỏe mạnh và cung cấp SQL qua cổng `10000`:
+
+```powershell
+docker compose up -d hiveserver2
+```
+
+Từ Power BI, tạo ODBC DSN `NYC_Taxi_Hive` trỏ đến `192.168.100.17:10000`,
+schema `default`, không xác thực. Cấu hình DSN này được dùng bởi các truy vấn
+trong `4-bi/power_query/`.
 
 `docker compose up -d` du dung cho lan chay thu 2 tro di (mac dinh `IS_RESUME=true`).
 **Rieng lan dau tien**, khi catalog Derby con trong, phai cho schematool tao schema truoc:
@@ -79,8 +90,6 @@ $py = "D:\BIGDATA\2-processing\.venv\Scripts\python.exe"
 & $py src\register_raw_nyc_taxi.py     --host <IP_may>    # raw_nyc_taxi (union schema)
 & $py src\register_compat_views.py     --host <IP_may>    # view cho code 3-analytics
 & $py src\verify_access.py             --host <IP_may>    # demo: chi spark.table(...) roi query
-& $py src\verify_person3_pipeline.py   --host <IP_may>    # demo: chay nguyen code cua Nguoi 3
-                                                    #   (LENH NAY CAN Python 3.11, xem ghi chu duoi)
 ```
 
 Raw lên HDFS bằng cùng `HdfsCopy` nhưng thêm tham số `tlc` ở cuối để đổi tên đường
@@ -96,15 +105,6 @@ MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
 java "-Dhadoop.home.dir=D:\hadoop" `
      -cp "D:/BIGDATA/2-processing/.venv/Lib/site-packages/pyspark/jars/*;tools/classes" `
      HdfsCopy "D:/BIGDATA/2-processing/data/raw" /data/nyc_taxi/raw/trips hdfs://<IP_may>:8020 4 tlc
-```
-
-Lưu ý `verify_person3_pipeline.py` **không chạy bằng `.venv` của mảnh 2**: env đó thiếu `numpy`
-nên `pyspark.ml` không import nổi. Dùng Python 3.11 hệ thống của máy này (đã có pyspark 4.0.1
-+ numpy 2.4.6 + pyarrow 24.0.0):
-
-```powershell
-& "C:\Users\ThinkPad\AppData\Local\Programs\Python\Python311\python.exe" `
-    src\verify_person3_pipeline.py --host <IP_may>
 ```
 
 ## 4. Người 3 / Người 4 cần đặt gì
@@ -137,7 +137,7 @@ của container và báo `could only be written to 0 of the 1 minReplication nod
 Ba điều phải biết khi dùng `raw_nyc_taxi` (đều đã đo, không phải suy đoán):
 
 - **Thiếu `RatecodeID` và `passenger_count`.** Hai cột này là INT64 ở 133 tháng rồi
-  DOUBLE ở 55 tháng. `tools/probe_type_promotion.py` đã đo đủ 15 ca (mỗi cặp khai-báo ↔ kiểu-file thật)
+DOUBLE ở 55 tháng. Một lần đọc thử trực tiếp đã đo đủ 15 ca (mỗi cặp khai-báo ↔ kiểu-file thật)
   và không kiểu nào đọc được cả hai phía: `double ← INT64` chết giữa chừng
   (`FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH`, SQLSTATE KD001),
   `bigint ← DOUBLE` chết ngay khi mở cột (`SchemaColumnConvertNotSupportedException`),
@@ -162,7 +162,7 @@ Tên cột của bảng sạch là `pickup_location_id` / `pickup_datetime` / `d
 `analysis.py::_trip_duration_minutes` làm `CAST(tpep_dropoff_datetime AS BIGINT)`, mà
 Parquet lưu timestamp dạng micros nên Spark 4 suy ra `TIMESTAMP_NTZ` — NTZ **không**
 cast sang BIGINT (`DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION`, đã gặp thật khi chạy
-`src/verify_person3_pipeline.py`). View cast về `TIMESTAMP` theo
+smoke run tháng `2024-01`). View cast về `TIMESTAMP` theo
 `spark.sql.session.timeZone = America/New_York`; giá trị giờ đồng hồ giữ nguyên, và
 `avg(độ lệch)` qua view khớp **tuyệt đối** với cột `trip_duration_min` có sẵn
 (17,1653 phút ở partition 2026-08, lệch 0,000000).
@@ -222,9 +222,9 @@ Báo nguyên văn thông báo lỗi cho Người 2 thay vì mô tả, vì ba ca 
 
 ### Đã chạy thay Người 3 trên kho này (kết quả thật, không phải suy)
 
-`src/verify_person3_pipeline.py` import nguyên `analysis.py`, `data_loader.py`,
-`evaluation.py`, `feature_engineering.py`, `model.py`, `writer.py` trong `3-analytics/`
-(không sửa một dòng nào của họ) rồi gọi đúng thứ tự như `main.py`, giới hạn partition
+Một lần smoke run đã import nguyên `analysis.py`, `data_loader.py`, `evaluation.py`,
+`feature_engineering.py`, `model.py`, `writer.py` trong `3-analytics/` (không sửa một dòng
+nào) rồi gọi đúng thứ tự như `main.py`, giới hạn partition
 `2024-01` và `maxIter=10` cho nhanh. Sau 521 s: **PASS 6/6 nhóm hàm** —
 
 | Bước | Số đo |
@@ -320,12 +320,9 @@ trong catalog Derby. Khi cần dựng catalog sach, `-RebuildCatalog` **đổi t
                               (DDL sinh tu source_manifest.csv cua man 2, khong mo file)
   src/register_compat_views.py view clean_nyc_taxi_tlc: doi ten cot ve kieu file goc cho 3-analytics
   src/verify_access.py        gia lam nguoi 3: chi spark.table("clean_nyc_taxi") roi query
-  src/verify_person3_pipeline.py  import nguyen module 3-analytics, chay ca 8 buoc tren 1 thang mau
   tools/HdfsCopy.java         chep local -> HDFS nguyen byte, nhieu luong, co resume, tu nghiem thu
                               (them tu "tlc" o cuoi de doi ten file TLC thanh year=/month=)
   tools/Set-Host.ps1          dong bo IP khi may doi mang (+ tuy chon dung lai catalog)
-  tools/probe_type_promotion.py  do truc tiep Spark doc file Parquet "ngu" kieu: loi nao
-                              chay duoc, tu do chot kieu union va 2 cot phai bo cua raw
   data/                       HDFS namenode/datanode + catalog Derby (KHONG len git)
 ```
 
@@ -345,7 +342,7 @@ trong catalog Derby. Khi cần dựng catalog sach, `-RebuildCatalog` **đổi t
   thuyết có cơ sở, chưa phải số đo thật. Ca này chỉ đóng được khi có người thứ hai chạy thật.
 - **Rác do quá trình dựng kho để lại, chưa xoá theo đúng quy tắc "không xoá file"**:
   trên HDFS có `/bench` (3,7 GB file ghi khi đo thông lượng), `/probe` (28 B) và
-  `/tmp/nyc_taxi_analytics_smoke` (output thử của `verify_person3_pipeline.py`, không phải
+  `/tmp/nyc_taxi_analytics_smoke` (output thử của smoke run, không phải
   bảng chính thức); trên đĩa có
   `data/metastore/metastore_db_ipcu_20261103*` (catalog cũ bị đổi tên khi dựng lại sau khi
   IP đổi) và `2-processing/.tmp/` (log probe/copy). Ai muốn sạch thì xoá hộ, mặc định để nguyên.
@@ -354,7 +351,7 @@ trong catalog Derby. Khi cần dựng catalog sach, `-RebuildCatalog` **đổi t
   chuyện được. `docker rmi` nếu cần chỗ.
 - **Môi trường Python của Người 3 khác máy này một chỗ**: `2-processing/.venv` không cài
   `numpy` nên không import được `pyspark.ml` (mà `3-analytics/evaluation.py` cần).
-  `verify_person3_pipeline.py` vì vậy chạy bằng Python 3.11 hệ thống của máy này
+  smoke run này vì vậy đã chạy bằng Python 3.11 hệ thống của máy
   (`C:\Users\ThinkPad\AppData\Local\Programs\Python\Python311`, đã có pyspark 4.0.1 +
   numpy 2.4.6 + pyarrow 24.0.0). Người 3 chỉ cần env của chính mình có numpy là chạy được.
 - **`4-bi/` chưa có dữ liệu riêng**: Người 4 đọc thẳng hai bảng trong kho (mục 4) hoặc Parquet

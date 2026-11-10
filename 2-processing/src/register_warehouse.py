@@ -11,6 +11,7 @@ Chạy:
 """
 
 from __future__ import annotations
+import logging
 
 import argparse
 import sys
@@ -51,7 +52,7 @@ def main() -> int:
     data_dir = Path(config["paths"]["clean_dir"])
     location = data_dir / "trips"
     if not location.is_dir():
-        print(f"[FAIL] Không thấy cây partition Parquet tại: {location}")
+        logging.error(f"[FAIL] Không thấy cây partition Parquet tại: {location}")
         return 1
 
     database, _, table = config["sink"]["hive_table"].partition(".")
@@ -86,33 +87,34 @@ def main() -> int:
     partitions = spark.sql(f"SHOW PARTITIONS {qualified}")
     partition_count = partitions.count()
     columns = len(spark.table(qualified).columns)
-    print(f"[register] {qualified}  location={location.as_uri()}")
-    print(f"[schema]   {columns} cột = {len(data_fields)} cột dữ liệu + year + month")
+    logging.info(f"[register] {qualified}  location={location.as_uri()}")
+    logging.info(f"[schema]   {columns} cột = {len(data_fields)} cột dữ liệu + year + month")
     if columns != len(data_fields) + 2:
         # IF NOT EXISTS im lặng giữ định nghĩa cũ; DROP TABLE không xoá dữ liệu vì là external.
-        print(f"[FAIL] Bảng đã tồn tại với {columns} cột, khác schema trên đĩa ({len(data_fields) + 2}).")
-        print(f"       Chạy: spark.sql('DROP TABLE {qualified}') rồi chạy lại script này.")
+        logging.error(f"[FAIL] Bảng đã tồn tại với {columns} cột, khác schema trên đĩa ({len(data_fields) + 2}).")
+        logging.info(f"       Chạy: spark.sql('DROP TABLE {qualified}') rồi chạy lại script này.")
         return 1
 
     expected = 188
     status = "OK" if partition_count == expected else "KHỚT"
-    print(f"[partitions] {partition_count}/{expected} -> {status}  ({time.monotonic() - started:.0f} s)")
+    logging.info(f"[partitions] {partition_count}/{expected} -> {status}  ({time.monotonic() - started:.0f} s)")
 
     if not args.skip_count:
         sample = spark.sql(
             f"SELECT count(*) AS n FROM {qualified} WHERE year = 2024 AND month = 1"
         ).collect()[0]["n"]
-        print(f"[count] 2024-01 = {sample:,}  (đọc từ footer Parquet, không quét file)")
+        logging.info(f"[count] 2024-01 = {sample:,}  (đọc từ footer Parquet, không quét file)")
         total = spark.table(qualified).select(F.count(F.lit(1))).collect()[0][0]
-        print(f"[count] toàn bảng = {total:,}  bằng chứng bàn giao là 1.506.791.871")
+        logging.info(f"[count] toàn bảng = {total:,}  bằng chứng bàn giao là 1.506.791.871")
         if total != 1_506_791_871:
-            print("[FAIL] Số dòng không khớp warehouse_summary.md")
+            logging.error("[FAIL] Số dòng không khớp warehouse_summary.md")
             return 1
 
-    print(f"[done] {time.monotonic() - started:.0f} s")
+    logging.info(f"[done] {time.monotonic() - started:.0f} s")
     spark.stop()
     return 0
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     sys.exit(main())

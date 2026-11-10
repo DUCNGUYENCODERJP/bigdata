@@ -4,7 +4,7 @@ __pycache__/
 .venv/
 venv/
 .tmp/
-.pytest_cache/
+.spark_tmp/
 .idea/
 .vscode/
 
@@ -20,6 +20,7 @@ derby.log
 # Môi trường cục bộ của từng người (đường dẫn máy-cụ-thể)
 *.env
 *.local.yaml
+custom_hosts
 
 # Ket qua bien dich cua 1-warehouse/tools (HdfsCopy.java -> classes/), tai tao bang
 # lenh javac ghi trong 1-warehouse/README.md muc 3.
