@@ -9,6 +9,9 @@ from dataclasses import dataclass, field
 from typing import List
 
 
+MIN_DATA_YEAR = 2011
+
+
 @dataclass
 class PipelineConfig:
     """All tuneable settings for the analytics and ML pipeline.
@@ -17,7 +20,7 @@ class PipelineConfig:
     ----------
     clean_table:
         Hive table containing cleaned trip records (fare_amount >= 0,
-        year >= 2011).
+        pickup year from 2011 through the newest available warehouse partition).
     raw_table:
         Hive table containing raw trip records, including cancelled rows
         (fare_amount < 0). Used only for the cancelled-trip analysis step.
@@ -40,14 +43,14 @@ class PipelineConfig:
     """
 
     # ── Hive tables ────────────────────────────────────────────────────────────
-    clean_table: str = "clean_nyc_taxi"
-    raw_table: str = "raw_nyc_taxi"
+    clean_table: str = "default.clean_nyc_taxi_tlc"
+    raw_table: str = "default.raw_nyc_taxi"
 
     # ── Output ─────────────────────────────────────────────────────────────────
     output_base: str = "hdfs:///user/hive/warehouse/nyc_taxi_analytics"
 
     # ── Spark ──────────────────────────────────────────────────────────────────
-    app_name: str = "NYC_Taxi_Analytics_ML_Person3"
+    app_name: str = "NYC_Taxi_Analytics_ML"
 
     # ── GBTRegressor hyper-parameters ──────────────────────────────────────────
     max_iter: int = 50
